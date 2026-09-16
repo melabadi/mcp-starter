@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.azure/
+.env
+.env.*
+!.env.example
+*.log
+infra/main.json
+infra/apps.json

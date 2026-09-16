@@ -1,0 +1,24 @@
+{
+  "servers": {
+    "com.example/mcp-setup-demo": {
+      "type": "http",
+      "url": "${input:mcpServerUrl}"
+    },
+    "mcp-setup-local": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/src/stdio.ts"]
+    },
+    "mcp-setup-http": {
+      "type": "http",
+      "url": "http://127.0.0.1:3001/mcp"
+    }
+  },
+  "inputs": [
+    {
+      "id": "mcpServerUrl",
+      "type": "promptString",
+      "description": "MCP server HTTPS URL from your deployment, including /mcp"
+    }
+  ]
+}

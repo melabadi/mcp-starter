@@ -1,0 +1,29 @@
+[
+  {
+    "server": {
+      "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+      "name": "com.example/mcp-setup-demo",
+      "title": "MCP Setup Demo",
+      "description": "Read-only deployment guidance and a greeting tool for testing MCP connectivity.",
+      "version": "1.0.0",
+      "repository": {
+        "url": "https://github.com/melabadi/mcp-starter",
+        "source": "github"
+      },
+      "remotes": [
+        {
+          "type": "streamable-http",
+          "url": "http://127.0.0.1:3001/mcp"
+        }
+      ]
+    },
+    "_meta": {
+      "io.modelcontextprotocol.registry/official": {
+        "status": "active",
+        "publishedAt": "2026-09-16T00:00:00Z",
+        "updatedAt": "2026-09-16T00:00:00Z",
+        "isLatest": true
+      }
+    }
+  }
+]
