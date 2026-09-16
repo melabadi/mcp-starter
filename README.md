@@ -2,7 +2,7 @@
 
 This guide shows how to host a source-controlled MCP registry, configure it for GitHub Copilot, understand the MCP request flow, and deploy an MCP server to Azure.
 
-The repository contains working TypeScript services, Bicep infrastructure, PowerShell deployment commands, and tests.
+The repository contains working TypeScript services, Bicep infrastructure, PowerShell deployment commands, tests, and evidence captured from a **test Azure tenant and test GitHub enterprise** on 16 September 2026.
 
 1. [How to host a registry](#how-to-host-a-registry)
 2. [How to configure it in GitHub](#how-to-configure-it-in-github)
@@ -155,6 +155,10 @@ The smoke test checks registry list and version routes, CORS, rejected writes, s
 
 Expected result: **5/5 checks passed**.
 
+![Registry API served by Azure](docs/images/03-azure-registry-api.png)
+
+The [verification record](docs/verification.md) contains the original test endpoints, screenshots, CI run, and measured results. Those addresses are evidence, not values to reuse.
+
 ### Maintain the Catalog
 
 1. Edit [registry/catalog.json](registry/catalog.json) through a reviewed change.
@@ -224,6 +228,11 @@ GitHub's [official configuration procedure](https://docs.github.com/en/copilot/h
 > [!WARNING]
 > Enter the registry base URL, not `/v0.1/servers`, `/mcp`, an ACR URL, or a raw JSON URL. GitHub appends the v0.1 routes. Never place a personal access token or another credential in the URL.
 
+> [!NOTE]
+> The current URL below is intentionally visible because it is a public, credential-free registry endpoint. The legacy screenshot later in this section is intentionally redacted because its raw-file URL contained an access token.
+
+![Current public registry URL saved with the existing policy retained](docs/images/02-github-enterprise-registry.png)
+
 ### Understand the Policy Boundary
 
 Registry-based restriction is currently a **public preview**. GitHub states that the more secure, generally available enforcement method is an enterprise [`managed-settings.json` MCP allowlist](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-mcp-usage/configure-enterprise-allowlist). A registry is still useful for discovery and curation, but it is not a substitute for authentication and authorization on each MCP server.
@@ -231,6 +240,14 @@ Registry-based restriction is currently a **public preview**. GitHub states that
 An organization owner can configure a registry under **Organization Settings > Copilot > Policies** where enterprise policy permits it. Enterprise policy takes precedence and may hide or disable organization controls. Policy also follows the organization or enterprise supplying the user's Copilot Business or Enterprise seat; it does not govern personal Copilot plans.
 
 Supported surfaces and enforcement behavior change over time. Check GitHub's [MCP private registry enforcement reference](https://docs.github.com/en/copilot/reference/enterprise-administrators/mcp-private-registry-enforcement) before rollout. Do not assume an enterprise registry configures Copilot cloud agent or every other Copilot surface in the same way.
+
+### Preserve Existing Catalog Entries
+
+The test enterprise previously used a token-bearing raw JSON URL that returned 404. Its one entry, `com.executeautomation/playwright-mcp-server`, was recovered through the authenticated browser and preserved in [registry/catalog.json](registry/catalog.json). The demo was added as a second entry.
+
+The inherited package was not installed, executed, upgraded, or endorsed. A later package lookup returned 404, so treat it as historical migration data and review or replace it before adopting this catalog. The former token is absent from the repository and screenshots; its owner should revoke it if it remains valid elsewhere.
+
+![Legacy registry URL redacted because it contained an access token](docs/images/01-github-mcp-before.png)
 
 ### Verify in VS Code
 
@@ -260,7 +277,13 @@ Expected result:
 Hello, GitHub! Your MCP server is connected.
 ```
 
-Microsoft's [VS Code MCP documentation](https://code.visualstudio.com/docs/agent-customization/mcp-servers) distinguishes workspace and profile configuration and warns that local MCP servers can run arbitrary code. Only start servers from trusted sources and inspect their configuration first. For failures, use **MCP: List Servers > Show Output** and check the selected account, policy refresh, trust state, and enabled tools.
+Microsoft's [VS Code MCP documentation](https://code.visualstudio.com/docs/agent-customization/mcp-servers) distinguishes workspace and profile configuration and warns that local MCP servers can run arbitrary code. Only start servers from trusted sources and inspect their configuration first.
+
+The test enterprise successfully displayed both entries in the VS Code `@mcp` gallery:
+
+![VS Code displaying both enterprise MCP registry entries](docs/images/05-vscode-enterprise-mcp-gallery.png)
+
+This screenshot proves registry retrieval and rendering, not installation, startup, or tool invocation. For failures, use **MCP: List Servers > Show Output** and check the selected account, policy refresh, trust state, and enabled tools.
 
 ## How MCP Works
 
@@ -414,6 +437,8 @@ node scripts/smoke.ts
 ```
 
 The deployment uses ACR cloud build and pins the Container Apps revision to the resulting image digest. The container runs as the non-root `node` user. The server has 0.25 CPU, 0.5 GiB memory, health probes, HTTPS-only ingress, and a maximum of one replica.
+
+![Azure-hosted MCP server health endpoint](docs/images/04-azure-server-health.png)
 
 ### Production Controls
 

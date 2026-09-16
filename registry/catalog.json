@@ -25,5 +25,37 @@
         "isLatest": true
       }
     }
+  },
+  {
+    "server": {
+      "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+      "name": "com.executeautomation/playwright-mcp-server",
+      "title": "Playwright MCP Server",
+      "description": "Automate web browsers using accessibility trees for testing and data extraction.",
+      "repository": {
+        "url": "https://github.com/anthropics/mcp-servers",
+        "source": "github"
+      },
+      "websiteUrl": "https://github.com/anthropics/mcp-servers",
+      "version": "0.0.3",
+      "packages": [
+        {
+          "registryType": "npm",
+          "identifier": "@executeautomation/playwright-mcp-server",
+          "version": "0.0.3",
+          "transport": {
+            "type": "stdio"
+          }
+        }
+      ]
+    },
+    "_meta": {
+      "io.modelcontextprotocol.registry/official": {
+        "status": "active",
+        "publishedAt": "2026-09-16T00:00:00Z",
+        "updatedAt": "2026-09-16T00:00:00Z",
+        "isLatest": true
+      }
+    }
   }
 ]

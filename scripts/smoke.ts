@@ -63,7 +63,7 @@ try {
     assert.ok(!url.username && !url.password && !url.search && !url.hash, 'Endpoints must not include secrets.');
   }
 
-  await check('Registry discovery, version routes, and configured catalog', async () => {
+  await check('Registry discovery, version routes, and preserved catalog', async () => {
     const response = await get(`${registryUrl}/v0.1/servers?version=latest`);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('access-control-allow-origin'), '*');

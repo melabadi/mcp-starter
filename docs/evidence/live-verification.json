@@ -1,0 +1,62 @@
+{
+  "verifiedAt": "2026-09-16T16:45:06.532Z",
+  "registryUrl": "https://mcp-setup-registry.thankfulplant-7b59e5ca.eastus2.azurecontainerapps.io",
+  "mcpServerUrl": "https://mcp-setup-server.thankfulplant-7b59e5ca.eastus2.azurecontainerapps.io/mcp",
+  "checks": [
+    {
+      "name": "Registry discovery, version routes, and preserved catalog",
+      "status": "passed",
+      "detail": {
+        "entries": [
+          "com.example/mcp-setup-demo",
+          "com.executeautomation/playwright-mcp-server"
+        ]
+      }
+    },
+    {
+      "name": "Registry CORS preflight and write rejection",
+      "status": "passed"
+    },
+    {
+      "name": "Server health and Origin rejection",
+      "status": "passed",
+      "detail": {
+        "status": "ok",
+        "service": "mcp-setup-demo",
+        "transport": "streamable-http",
+        "endpoint": "/mcp",
+        "tools": [
+          "greet",
+          "deployment_checklist"
+        ],
+        "dataAccess": "none; public demo only"
+      }
+    },
+    {
+      "name": "SDK tool discovery and calls (legacy)",
+      "status": "passed",
+      "detail": {
+        "tools": [
+          "greet",
+          "deployment_checklist"
+        ],
+        "greeting": {
+          "message": "Hello, GitHub! Your MCP server is connected."
+        }
+      }
+    },
+    {
+      "name": "SDK tool discovery and calls (auto)",
+      "status": "passed",
+      "detail": {
+        "tools": [
+          "greet",
+          "deployment_checklist"
+        ],
+        "greeting": {
+          "message": "Hello, GitHub! Your MCP server is connected."
+        }
+      }
+    }
+  ]
+}

@@ -18,7 +18,7 @@ test('registry implements the GitHub v0.1 discovery contract', async (context) =
   assert.equal(list.status, 200);
   assert.equal(list.headers.get('access-control-allow-origin'), '*');
   const catalog = await list.json();
-  assert.equal(catalog.metadata.count, 1);
+  assert.equal(catalog.metadata.count, 2);
   assert.equal(catalog.metadata.nextCursor, undefined);
   assert.equal(catalog.servers[0].server.remotes[0].url, 'https://demo.example.com/mcp');
 
@@ -50,7 +50,17 @@ test('registry implements the GitHub v0.1 discovery contract', async (context) =
 
   const firstPage = await (await fetch(`${base}/v0.1/servers?limit=1`)).json();
   assert.equal(firstPage.metadata.count, 1);
-  assert.equal(firstPage.metadata.nextCursor, undefined);
+  assert.ok(firstPage.metadata.nextCursor);
+  const secondPage = await (await fetch(`${base}/v0.1/servers?limit=1&cursor=${firstPage.metadata.nextCursor}`)).json();
+  assert.equal(secondPage.metadata.count, 1);
+  assert.equal(secondPage.metadata.nextCursor, undefined);
+  assert.equal(secondPage.servers[0].server.name, 'com.executeautomation/playwright-mcp-server');
+  assert.deepEqual(secondPage.servers[0].server.packages, [{
+    registryType: 'npm',
+    identifier: '@executeautomation/playwright-mcp-server',
+    version: '0.0.3',
+    transport: { type: 'stdio' },
+  }]);
 });
 
 test('registry refuses insecure non-local MCP URLs', () => {
