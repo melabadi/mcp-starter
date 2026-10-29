@@ -1,0 +1,6 @@
+Deployment workshop
+These are synthetic public demo notes, not real project records.
+
+The deployment uses a read-only MCP server.
+Keep registry catalog changes in source control.
+Run npm test and npm run typecheck before publishing changes.

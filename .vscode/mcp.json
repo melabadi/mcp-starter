@@ -1,5 +1,13 @@
 {
   "servers": {
+    "mcp-notes-demo": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}\\src\\notes-stdio.ts"],
+      "env": {
+        "NOTES_ROOT": "${workspaceFolder}\\examples\\notes"
+      }
+    },
     "com.example/mcp-setup-demo": {
       "type": "http",
       "url": "${input:mcpServerUrl}"

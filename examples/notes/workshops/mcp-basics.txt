@@ -1,0 +1,8 @@
+MCP workshop
+These are synthetic public demo notes, not real meeting records.
+
+The host launches a local server over stdio.
+The client discovers tool names, descriptions, and input schemas with tools/list.
+The client invokes a tool with tools/call and receives content and structured data.
+The server reads the configured notes folder; the model does not access the disk directly.
+The host and model use returned passages to answer the user's question.

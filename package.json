@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit",
     "start": "node src/main.ts server",
     "start:registry": "node src/main.ts registry",
-    "start:stdio": "node src/stdio.ts"
+    "start:stdio": "node src/stdio.ts",
+    "start:notes": "node src/notes-stdio.ts",
+    "demo:notes": "node scripts/notes-demo.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.0.0",

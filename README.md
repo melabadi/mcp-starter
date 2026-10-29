@@ -1,16 +1,17 @@
 # MCP Starter: GitHub Enterprise and Azure
 
-This guide shows how to host a source-controlled MCP registry, configure it for GitHub Copilot, understand the MCP request flow, and deploy an MCP server to Azure.
+This guide shows how to run a local text-notes MCP server, host a source-controlled MCP registry, configure it for GitHub Copilot, understand the MCP request flow, and deploy an MCP server to Azure.
 
 The repository contains working TypeScript services, Bicep infrastructure, PowerShell deployment commands, tests, and evidence captured from a **test Azure tenant and test GitHub enterprise** on 16 September 2026.
 
-1. [How to host a registry](#how-to-host-a-registry)
-2. [How to configure it in GitHub](#how-to-configure-it-in-github)
-3. [How MCP works](#how-mcp-works)
-4. [How to deploy your own MCP server](#how-to-deploy-your-own-mcp-server)
+1. [Local text-notes demo](#local-text-notes-demo)
+2. [How to host a registry](#how-to-host-a-registry)
+3. [How to configure it in GitHub](#how-to-configure-it-in-github)
+4. [How MCP works](#how-mcp-works)
+5. [How to deploy your own MCP server](#how-to-deploy-your-own-mcp-server)
 
 > [!IMPORTANT]
-> The hosted registry and MCP server are anonymous, read-only demonstrations, not production security templates. They contain no business data or external tool integrations. Azure resources incur charges, and the deployed registry catalog is publicly readable.
+> The hosted registry and HTTP MCP server are anonymous, read-only demonstrations, not production security templates. They contain no business data or external tool integrations. Azure resources incur charges, and the deployed registry catalog is publicly readable. The separate local notes server reads only its configured folder; do not expose it through the anonymous HTTP service.
 
 ## Repository Map
 
@@ -24,9 +25,118 @@ The repository contains working TypeScript services, Bicep infrastructure, Power
 | Add an MCP tool | [src/mcp-server.ts](src/mcp-server.ts) |
 | Change service startup or environment handling | [src/main.ts](src/main.ts) |
 | Run the server over stdio | [src/stdio.ts](src/stdio.ts) |
+| Read local `.txt` notes through MCP | [src/notes-server.ts](src/notes-server.ts) and [src/notes.ts](src/notes.ts) |
+| Launch the local notes server | [src/notes-stdio.ts](src/notes-stdio.ts) |
+| See real notes discovery and tool calls | [scripts/notes-demo.ts](scripts/notes-demo.ts) |
+| Browse public example notes | [examples/notes](examples/notes) |
 | Connect VS Code | [.vscode/mcp.json](.vscode/mcp.json) |
 | Verify a deployment | [scripts/smoke.ts](scripts/smoke.ts) |
 | Review automated checks | [tests](tests) and [.github/workflows/validate.yml](.github/workflows/validate.yml) |
+
+## Local Text-Notes Demo
+
+This example shows MCP connecting an AI client to a real filesystem. It requires **Node.js 22.18+**, but no Azure subscription, Microsoft sign-in, API key, or native helper. It works with a dedicated notes folder, including one you choose within Documents; it never discovers or hardcodes your home or Documents path.
+
+### Try It Without Private Data
+
+From the repository root in PowerShell:
+
+```powershell
+npm ci --ignore-scripts
+npm run demo:notes
+```
+
+The demo launches the real server as a child process, negotiates MCP using the official TypeScript SDK v2, discovers all three tool schemas, and calls the tools against the committed synthetic notes. It always selects [examples/notes](examples/notes), even if `NOTES_ROOT` is set in your shell. It prints requests and responses, uses no LLM, and closes the server when finished. These are real filesystem reads, not mocked tool responses.
+
+For an AI-driven demonstration in VS Code:
+
+1. Open this repository with GitHub Copilot Chat available.
+2. Open [.vscode/mcp.json](.vscode/mcp.json) and start **mcp-notes-demo** using its MCP Start action. Review the trust prompt before approving the server.
+3. In an agent-capable chat, enable its tools and ask: **"Use the notes MCP tools to find deployment guidance. Read the matching note, then answer with the relative filename and line numbers."**
+
+The Windows VS Code configuration explicitly selects the public example folder. The other server entries are separate registry/HTTP examples and are not needed for this demo.
+
+### What MCP Does Here
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Host as AI host and MCP client
+    participant Server as Local notes MCP server
+    participant Disk as Configured notes folder
+    Host->>Server: initialize and capability negotiation (SDK)
+    Host->>Server: tools/list
+    Server-->>Host: Names, descriptions, JSON input/output schemas
+    User->>Host: Find deployment guidance in my notes
+    Host->>Server: tools/call search_notes, query = deployment
+    Server->>Disk: Read allowed .txt files
+    Disk-->>Server: UTF-8 text
+    Server-->>Host: Matching paths, line numbers, excerpts
+    Host->>Server: tools/call read_note, path = deployment.txt
+    Server->>Disk: Read the requested note
+    Server-->>Host: Numbered lines and pagination
+    Host-->>User: Answer grounded in the returned passages
+```
+
+The **host** manages chat, model access, tool approval, and the MCP client connection. The **server** validates tool inputs and performs bounded filesystem reads; it contains no model or summarization logic. The SDK handles MCP initialization, discovery, validation, and transport. With stdio, the host launches `node` and communicates over its stdin/stdout: there is no listening network port, URL, or registry requirement. Server diagnostics go to stderr, not the protocol stream.
+
+| Tool | Example arguments | Result |
+| --- | --- | --- |
+| `list_notes` | `{"directory":"","offset":0,"limit":20}` | Sorted relative paths, byte sizes, modification times, total count, `nextOffset` |
+| `search_notes` | `{"query":"deployment","maxMatches":20}` | Literal matching-line excerpts, relative paths, line numbers, `scannedFiles`, `truncated` |
+| `read_note` | `{"path":"deployment.txt","startLine":4,"maxLines":3}` | Numbered text lines, total line count, `nextStartLine` |
+
+Successful tool responses contain both text `content` (JSON readable by the host/model) and matching `structuredContent` validated against an output schema. Validation or filesystem failures return `isError: true` rather than invented results. Use the script output to inspect these actual MCP shapes.
+
+### Select Your Own Notes Folder
+
+`NOTES_ROOT` is the only setting. It must be an **absolute path to an existing folder**. When unset, the server uses the public examples relative to its own source file, independent of the working directory. Empty, relative, missing, or unreadable configured roots fail; they never fall back to another folder.
+
+To select a folder interactively without embedding a machine-specific path in source control:
+
+```powershell
+$env:NOTES_ROOT = (Resolve-Path -LiteralPath (Read-Host 'Absolute path to your dedicated text-notes folder')).Path
+npm run start:notes
+```
+
+`start:notes` waits for an MCP client on stdin; it is not an interactive chat or HTTP server. Use Ctrl+C to stop it. Setting an environment variable in a terminal does not update an already-running VS Code process or override the demo's explicit folder.
+
+For personal use in VS Code, add this server to your **user-level MCP configuration**, replacing the server entrypoint with your own checkout location. Do not commit the personal configuration. VS Code prompts for the notes folder when resolving the configuration:
+
+```json
+{
+  "servers": {
+    "my-txt-notes": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["C:\\path\\to\\mcp-starter\\src\\notes-stdio.ts"],
+      "env": {
+        "NOTES_ROOT": "${input:notesRoot}"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "id": "notesRoot",
+      "type": "promptString",
+      "description": "Absolute path to a dedicated folder of UTF-8 .txt notes"
+    }
+  ]
+}
+```
+
+The entrypoint path above is a placeholder, not a required location. Other MCP hosts can launch the same Node entrypoint with the same environment variable.
+
+### Boundaries and Privacy
+
+- Read-only `.txt` files, including `.TXT`, in UTF-8 (optional BOM). No write, delete, shell, or arbitrary-file tools. Save UTF-16 notes as UTF-8 first; binary/invalid UTF-8 files are rejected.
+- Paths are relative to the configured root. Absolute paths, traversal, Windows device names, and alternate data streams are rejected. Directory scans omit symbolic links and junctions; explicitly reading through one is rejected even when it points inside the root. The configured root itself is resolved once, so a redirected Documents folder can be explicitly selected.
+- Each read/search note is limited to **64 KiB**. Listing scans at most **2,000 entries** and **12 nested levels**, with at most **100 notes per page**. Exceeding scan limits is an error, not a partial listing; use `directory` to narrow the scan. Pagination rescans the folder, so changes between calls can change page boundaries.
+- Reads return at most **200 lines** per call, with 1-based line numbers. Empty files have zero lines; a trailing newline produces a final empty line. Search is literal, case-insensitive by default (`caseSensitive: true` is available), and returns at most **50 matching lines**, one excerpt of at most **500 characters** per line. `excerptStartColumn` is 1-based; `excerptTruncated` marks shortened lines. Follow up with `read_note` to see full lines. `truncated: true` means the match cap stopped the scan before all lines/files were examined, not that further matches are guaranteed.
+- Oversized, unreadable, or invalid UTF-8 notes encountered during search fail that call explicitly; they are not silently skipped. Files beyond an early match cutoff are not read.
+- Filenames, matching passages, and requested lines are sent to the connected AI host and may be sent to its model provider. Local execution is **not** a promise that returned data stays on your device. Treat note contents as untrusted data, never as instructions to run commands or disclose more files.
+- The server does not persist results or log note contents, and its own error messages omit absolute filesystem paths. The demo script intentionally prints only the public samples. Your host may retain tool results in chat history. Keep personal notes outside this repository and use synthetic notes for demos and screenshots.
+- Use a trusted, dedicated folder and normal user permissions. Path checks are not an OS sandbox against another local process maliciously replacing directories while calls run. No private data integration is added to the Azure HTTP service, Docker deployment, or public registry catalog.
 
 ## How to Host a Registry
 
