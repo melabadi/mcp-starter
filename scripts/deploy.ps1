@@ -7,6 +7,9 @@ param(
     [string]$Location = 'eastus2',
     [ValidatePattern('^[a-z][a-z0-9-]{2,17}$')]
     [string]$BaseName = 'mcp-setup',
+    [Parameter(Mandatory)]
+    [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9-]{0,49}$')]
+    [string]$AdoOrganization,
     [ValidatePattern('^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$')]
     [string]$ImageTag = (Get-Date -AsUTC -Format 'yyyyMMddHHmmss')
 )
@@ -66,7 +69,7 @@ Write-Host '5. Deploy the registry and MCP server from infra/apps.bicep'
 $endpoints = az deployment group create `
     --subscription $SubscriptionId --resource-group $ResourceGroup `
     --name "$BaseName-apps" --template-file infra/apps.bicep `
-    --parameters "location=$Location" "baseName=$BaseName" "registryName=$($infrastructure.registryName)" "image=$image" `
+    --parameters "location=$Location" "baseName=$BaseName" "registryName=$($infrastructure.registryName)" "image=$image" "adoOrganization=$AdoOrganization" `
     --query properties.outputs.endpoints.value --output json --only-show-errors | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { throw 'App deployment failed.' }
 

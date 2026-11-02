@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
-import { OneNoteError, OneNoteGraphClient } from './onenote.ts';
+import { OneNoteError, type OneNoteClient } from './onenote.ts';
 
 const annotations = {
   readOnlyHint: true,
@@ -24,7 +24,7 @@ async function result<T extends Record<string, unknown>>(action: () => Promise<T
   }
 }
 
-export function buildOneNoteServer(graph: OneNoteGraphClient) {
+export function buildOneNoteServer(client: OneNoteClient) {
   const server = new McpServer({ name: 'onenote-readonly', version: '1.0.0' });
 
   server.registerTool('list_notebooks', {
@@ -35,7 +35,7 @@ export function buildOneNoteServer(graph: OneNoteGraphClient) {
       notebooks: z.array(z.object({ id: z.string(), displayName: z.string() })),
     }),
     annotations,
-  }, async () => result(async () => ({ notebooks: await graph.listNotebooks() })));
+  }, async () => result(async () => ({ notebooks: await client.listNotebooks() })));
 
   server.registerTool('list_sections', {
     title: 'List OneNote sections',
@@ -53,7 +53,7 @@ export function buildOneNoteServer(graph: OneNoteGraphClient) {
     }),
     annotations,
   }, async ({ notebookId, limit, cursor }) => result(async () => (
-    await graph.listSections(notebookId, limit, cursor)
+    await client.listSections(notebookId, limit, cursor)
   )));
 
   server.registerTool('list_pages', {
@@ -73,7 +73,7 @@ export function buildOneNoteServer(graph: OneNoteGraphClient) {
     }),
     annotations,
   }, async ({ notebookId, sectionId, limit, cursor }) => result(async () => (
-    await graph.listPages(notebookId, sectionId, limit, cursor)
+    await client.listPages(notebookId, sectionId, limit, cursor)
   )));
 
   server.registerTool('read_page', {
@@ -92,7 +92,7 @@ export function buildOneNoteServer(graph: OneNoteGraphClient) {
     }),
     annotations,
   }, async ({ notebookId, pageId }) => result(async () => ({
-    ...await graph.readPage(notebookId, pageId),
+    ...await client.readPage(notebookId, pageId),
   })));
 
   return server;

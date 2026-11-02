@@ -2,58 +2,68 @@
   {
     "server": {
       "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-      "name": "com.example/mcp-setup-demo",
-      "title": "MCP Setup Demo",
-      "description": "Read-only deployment guidance and a greeting tool for testing MCP connectivity.",
+      "name": "io.github.melabadi/azure-devops",
+      "title": "Azure DevOps (read-only demo)",
+      "description": "Microsoft-hosted Azure DevOps MCP, limited to project, work item and pull request reads.",
       "version": "1.0.0",
       "repository": {
-        "url": "https://github.com/melabadi/mcp-starter",
+        "url": "https://github.com/microsoft/azure-devops-mcp",
         "source": "github"
       },
       "remotes": [
         {
           "type": "streamable-http",
-          "url": "http://127.0.0.1:3001/mcp"
+          "url": "https://mcp.dev.azure.com/",
+          "headers": [
+            {
+              "name": "X-MCP-Readonly",
+              "value": "true",
+              "isRequired": true
+            },
+            {
+              "name": "X-MCP-Tools",
+              "value": "core_list_projects,wit_work_item,repo_pull_request",
+              "isRequired": true
+            }
+          ]
         }
       ]
     },
     "_meta": {
       "io.modelcontextprotocol.registry/official": {
         "status": "active",
-        "publishedAt": "2026-09-16T00:00:00Z",
-        "updatedAt": "2026-09-16T00:00:00Z",
+        "publishedAt": "2026-11-02T00:00:00Z",
+        "updatedAt": "2026-11-02T00:00:00Z",
         "isLatest": true
       }
     }
   },
   {
     "server": {
-      "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
-      "name": "com.executeautomation/playwright-mcp-server",
-      "title": "Playwright MCP Server",
-      "description": "Automate web browsers using accessibility trees for testing and data extraction.",
+      "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+      "name": "io.github.melabadi/onenote-local",
+      "title": "OneNote Local COM (read-only)",
+      "description": "Local Windows OneNote desktop adapter. Run the repository setup script; this is not a published npm package or a remote service.",
       "repository": {
-        "url": "https://github.com/anthropics/mcp-servers",
+        "url": "https://github.com/melabadi/mcp-starter",
         "source": "github"
       },
-      "websiteUrl": "https://github.com/anthropics/mcp-servers",
-      "version": "0.0.3",
-      "packages": [
-        {
-          "registryType": "npm",
-          "identifier": "@executeautomation/playwright-mcp-server",
-          "version": "0.0.3",
-          "transport": {
-            "type": "stdio"
-          }
+      "websiteUrl": "https://github.com/melabadi/mcp-starter#read-onenote-through-mcp",
+      "version": "1.0.0",
+      "_meta": {
+        "io.modelcontextprotocol.registry/publisher-provided": {
+          "transport": "stdio",
+          "setupScript": "scripts/setup-onenote-demo.ps1",
+          "entrypoint": "src/onenote-stdio.ts",
+          "installation": "Manual local checkout; no package download is advertised."
         }
-      ]
+      }
     },
     "_meta": {
       "io.modelcontextprotocol.registry/official": {
         "status": "active",
-        "publishedAt": "2026-09-16T00:00:00Z",
-        "updatedAt": "2026-09-16T00:00:00Z",
+        "publishedAt": "2026-11-02T00:00:00Z",
+        "updatedAt": "2026-11-02T00:00:00Z",
         "isLatest": true
       }
     }

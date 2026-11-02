@@ -1,10 +1,19 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { test } from 'node:test';
-import { createRegistryServer } from '../src/registry.ts';
+import { fileURLToPath } from 'node:url';
+import { createRegistryServer, loadRegistryCatalog } from '../src/registry.ts';
+
+test('catalog is organization-neutral by default and endpoint overrides never mutate the source', () => {
+  const url = (override?: string) => loadRegistryCatalog(override)[0].server.remotes?.[0]?.url;
+  assert.equal(url(), 'https://mcp.dev.azure.com/');
+  assert.equal(url('https://mcp.dev.azure.com/reader-org'), 'https://mcp.dev.azure.com/reader-org');
+  assert.equal(url(), 'https://mcp.dev.azure.com/');
+});
 
 test('registry implements the GitHub v0.1 discovery contract', async (context) => {
-  const server = createRegistryServer('https://demo.example.com/mcp');
+  const server = createRegistryServer('https://mcp.dev.azure.com/test-org');
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   context.after(() => new Promise<void>((resolve, reject) => {
@@ -20,7 +29,14 @@ test('registry implements the GitHub v0.1 discovery contract', async (context) =
   const catalog = await list.json();
   assert.equal(catalog.metadata.count, 2);
   assert.equal(catalog.metadata.nextCursor, undefined);
-  assert.equal(catalog.servers[0].server.remotes[0].url, 'https://demo.example.com/mcp');
+  assert.deepEqual(catalog.servers.map((entry: { server: { name: string } }) => entry.server.name), [
+    'io.github.melabadi/azure-devops', 'io.github.melabadi/onenote-local',
+  ]);
+  assert.equal(catalog.servers[0].server.remotes[0].url, 'https://mcp.dev.azure.com/test-org');
+  assert.deepEqual(catalog.servers[0].server.remotes[0].headers, [
+    { name: 'X-MCP-Readonly', value: 'true', isRequired: true },
+    { name: 'X-MCP-Tools', value: 'core_list_projects,wit_work_item,repo_pull_request', isRequired: true },
+  ]);
 
   const name = encodeURIComponent(catalog.servers[0].server.name);
   for (const version of ['latest', '1.0.0']) {
@@ -54,17 +70,34 @@ test('registry implements the GitHub v0.1 discovery contract', async (context) =
   const secondPage = await (await fetch(`${base}/v0.1/servers?limit=1&cursor=${firstPage.metadata.nextCursor}`)).json();
   assert.equal(secondPage.metadata.count, 1);
   assert.equal(secondPage.metadata.nextCursor, undefined);
-  assert.equal(secondPage.servers[0].server.name, 'com.executeautomation/playwright-mcp-server');
-  assert.deepEqual(secondPage.servers[0].server.packages, [{
-    registryType: 'npm',
-    identifier: '@executeautomation/playwright-mcp-server',
-    version: '0.0.3',
-    transport: { type: 'stdio' },
-  }]);
+  assert.equal(secondPage.servers[0].server.name, 'io.github.melabadi/onenote-local');
+  assert.equal(secondPage.servers[0].server.packages, undefined);
+  assert.equal(secondPage.servers[0].server.remotes, undefined);
+  for (const removed of ['com.executeautomation/playwright-mcp-server', 'com.example/mcp-setup-demo']) {
+    assert.equal((await fetch(`${base}/v0.1/servers/${encodeURIComponent(removed)}/versions/latest`)).status, 404);
+  }
 });
 
 test('registry refuses insecure non-local MCP URLs', () => {
+  assert.throws(() => createRegistryServer('https://unapproved.example/mcp'), /Azure DevOps/);
+  assert.throws(() => createRegistryServer('https://mcp.dev.azure.com:8443/org'), /Azure DevOps/);
+  assert.throws(() => createRegistryServer('https://mcp.dev.azure.com/org/extra'), /Azure DevOps/);
   assert.throws(() => createRegistryServer('http://demo.example.com/mcp'), /HTTPS/);
   assert.throws(() => createRegistryServer('https://demo.example.com/mcp?token=example'), /credentials/);
   assert.throws(() => createRegistryServer('https://user:example@demo.example.com/mcp'), /credentials/);
+});
+
+test('smoke verification accepts the reader organization override rather than a hardcoded endpoint', () => {
+  const smoke = fileURLToPath(new URL('../scripts/smoke.ts', import.meta.url));
+  const result = spawnSync(process.execPath, [
+    smoke, '--local', '--ado-url', 'https://mcp.dev.azure.com/reader-org',
+  ], { encoding: 'utf8', timeout: 30_000 });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /5\/5 checks passed/u);
+  const invalid = spawnSync(process.execPath, [smoke, '--registry', 'https://registry.example.com'], {
+    encoding: 'utf8', timeout: 10_000,
+  });
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr, /Provide both --registry and --server/u);
 });

@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .azure/
+.local/
+.mcp.json
 .env
 .env.*
 !.env.example

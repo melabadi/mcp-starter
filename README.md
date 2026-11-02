@@ -1,17 +1,36 @@
 # MCP Starter: GitHub Enterprise and Azure
 
-This guide shows how to run a local text-notes MCP server, host a source-controlled MCP registry, configure it for GitHub Copilot, understand the MCP request flow, and deploy an MCP server to Azure.
+Learn to use, build, publish, and govern MCP servers. Start with a credential-free SDK lab, run a source-controlled MCP registry locally, then deploy your own registry to Azure and connect it to GitHub Copilot.
 
-The repository contains working TypeScript services, Bicep infrastructure, PowerShell deployment commands, tests, and evidence captured from a **test Azure tenant and test GitHub enterprise** on 16 September 2026.
+The optional two-server workshop connects Microsoft's remote Azure DevOps MCP and a local, read-only Windows OneNote COM MCP. You supply your own organization and approved notebook configuration; this checkout does not require the author's accounts or deployed resources.
 
-1. [Local text-notes demo](#local-text-notes-demo)
-2. [How to host a registry](#how-to-host-a-registry)
-3. [How to configure it in GitHub](#how-to-configure-it-in-github)
-4. [How MCP works](#how-mcp-works)
-5. [How to deploy your own MCP server](#how-to-deploy-your-own-mcp-server)
+1. [Quick start: no cloud account required](#quick-start)
+2. [Run and query an MCP registry](#how-to-host-a-registry)
+3. [Deploy your registry to Azure](#deploy-this-registry-to-azure)
+4. [Configure discovery and policy in GitHub](#how-to-configure-it-in-github)
+5. [Connect Azure DevOps and local OneNote](#workshop-demo-azure-devops-and-local-onenote)
+6. [Understand MCP and build your own server](#how-mcp-works)
+7. [Verify your setup](docs/verification.md)
 
 > [!IMPORTANT]
 > The hosted registry and HTTP MCP server are anonymous, read-only demonstrations, not production security templates. They contain no business data or external tool integrations. Azure resources incur charges, and the deployed registry catalog is publicly readable. The separate local notes server reads only its configured folder; do not expose it through the anonymous HTTP service.
+
+## Quick Start
+
+Install **Node.js 22.18+** and **PowerShell 7.2+**, then run from the repository root:
+
+```powershell
+git clone https://github.com/melabadi/mcp-starter.git
+Set-Location .\mcp-starter
+npm ci --ignore-scripts
+npm run demo:hello
+npm run demo:notes
+node .\scripts\smoke.ts --local
+```
+
+The Hello World lab launches a real MCP server, discovers `hello`, calls it with `World`, checks the exact greeting, and rejects invalid input. The text-notes lab uses only committed synthetic notes. The smoke check starts temporary loopback registry/HTTP services, runs **5 checks**, and closes them. None of these commands needs Azure, OneNote, Copilot, or a token.
+
+To explore the registry interactively, run `npm run start:registry` and follow the [PowerShell catalog queries](#run-and-query-the-registry-locally). This process serves catalog metadata; it does not start ADO or read OneNote.
 
 ## Repository Map
 
@@ -28,11 +47,78 @@ The repository contains working TypeScript services, Bicep infrastructure, Power
 | Read local `.txt` notes through MCP | [src/notes-server.ts](src/notes-server.ts) and [src/notes.ts](src/notes.ts) |
 | Launch the local notes server | [src/notes-stdio.ts](src/notes-stdio.ts) |
 | Read approved OneNote notebooks through MCP | [src/onenote-server.ts](src/onenote-server.ts), [src/onenote.ts](src/onenote.ts), and [src/onenote-auth.ts](src/onenote-auth.ts) |
+| Read OneNote desktop locally through COM | [src/onenote-com.ts](src/onenote-com.ts) and [scripts/onenote-com.ps1](scripts/onenote-com.ps1) |
+| Configure the CLI and synthetic OneNote notebook | [scripts/setup-onenote-demo.ps1](scripts/setup-onenote-demo.ps1) and [.github/mcp.json](.github/mcp.json) |
+| Run Copilot with exactly the two demo MCPs enabled | [scripts/demo.ps1](scripts/demo.ps1) |
+| Run the workshop Hello World lab | [examples/hello](examples/hello) |
 | See real notes discovery and tool calls | [scripts/notes-demo.ts](scripts/notes-demo.ts) |
 | Browse public example notes | [examples/notes](examples/notes) |
 | Connect VS Code | [.vscode/mcp.json](.vscode/mcp.json) |
 | Verify a deployment | [scripts/smoke.ts](scripts/smoke.ts) |
 | Review automated checks | [tests](tests) and [.github/workflows/validate.yml](.github/workflows/validate.yml) |
+
+## Workshop Demo: Azure DevOps and Local OneNote
+
+From the repository root, with Windows OneNote desktop installed:
+
+```powershell
+npm ci --ignore-scripts
+$AdoOrganization = Read-Host 'Your Azure DevOps organization name (not a project or URL)'
+powershell.exe -NoProfile -STA -ExecutionPolicy RemoteSigned `
+  -File .\scripts\setup-onenote-demo.ps1 -AdoOrganization $AdoOrganization
+npm run demo:hello
+npm run demo:onenote
+.\scripts\demo.ps1
+```
+
+You can also run **MCP Workshop: Copilot CLI** from VS Code's Run Task command; its definition is in [.vscode/tasks.json](.vscode/tasks.json).
+
+> [!IMPORTANT]
+> The launcher limits this session to the two workshop MCPs. It does not deploy enterprise policy, grant backend access, or prove that enterprise restrictions are enforced. Complete the [positive and negative client checks](docs/verification.md#5-verify-effective-client-policy) before claiming a rollout is locked down.
+
+The setup script creates only a dedicated **MCP Workshop Demo** notebook under the gitignored local data folder, with one synthetic page. It does not modify existing notebooks. Repeating setup reuses the same fixture. `RemoteSigned` is scoped to the child PowerShell process; no machine or user execution policy is changed, and managed policy still takes precedence.
+
+The committed [.github/mcp.json](.github/mcp.json) uses the organization-neutral `https://mcp.dev.azure.com/` endpoint, with `X-MCP-Readonly: true` and only `core_list_projects`, `wit_work_item`, and `repo_pull_request`. Without an organization in the URL, provide it in tool-call context. The setup command above generates an organization-specific URL instead, which is recommended for the workshop. Complete Microsoft's interactive authentication when offered; no token belongs in this JSON. The organization must be Entra-backed and the account must have appropriate ADO access. See [Microsoft Learn: remote Azure DevOps MCP setup](https://learn.microsoft.com/azure/devops/mcp-server/remote-mcp-server).
+
+Setup generates gitignored local files:
+
+| File | Purpose |
+| --- | --- |
+| `.mcp.json` | CLI configuration for your ADO organization and the absolute local OneNote entrypoint |
+| `.local/onenote-demo.json` | IDs for the synthetic notebook, section and page |
+| `.local/managed-settings.json` | Suggested exact URL/command allowlist for administrator review; not automatically deployed |
+
+The local CLI file takes precedence over [.github/mcp.json](.github/mcp.json) and same-named personal definitions. The separate [.vscode/mcp.json](.vscode/mcp.json) prompts for your ADO organization and approved OneNote IDs using VS Code's `servers` wrapper; it is not a CLI configuration. Review generated local configuration before replacing an existing setup.
+
+In the CLI, review `/mcp`, then try:
+
+- **Use azure-devops to list my projects. Do not modify anything.**
+- **Use onenote-local to list the approved notebooks, then read the MCP Workshop Demo page.**
+
+[scripts/demo.ps1](scripts/demo.ps1) disables every other configured user/plugin MCP and the built-in MCPs **for this launch only**, without deleting personal settings or granting automatic tool approval. Verify the enabled set without a model call:
+
+```powershell
+$configuration = .\scripts\demo.ps1 mcp list --json | ConvertFrom-Json
+$configuration.mcpServers.PSObject.Properties |
+    Where-Object { $_.Value.enabled } | Select-Object Name
+# azure-devops
+# onenote-local
+```
+
+### Learning Path
+
+| Topic | Runnable example |
+| --- | --- |
+| 01: Host, client, server and capability boundaries | SDK-only Hello World; OneNote host/client/COM boundary. Tools are implemented; resources/prompts are explained, not falsely advertised as tools. |
+| 02: Discovery, schemas, results, errors and transports | `npm run demo:hello`, `npm run demo:onenote`, and `node scripts/smoke.ts --local`; real stdio and HTTP calls, schema errors, structured results, legacy/auto negotiation. |
+| 03: REST versus MCP versus CLI | ADO is the provider-hosted adapter; local OneNote uses COM rather than Graph REST. Backend access and MCP discovery remain separate. |
+| 04: Connect ADO in Copilot CLI/App | Shared CLI JSON, generated two-server local JSON, read-only headers and provider sign-in. In the App, add the same HTTP endpoint under Customize > MCP; authenticate and inspect tools there separately. |
+| 05: Build a server | `hello({name:"World"})` lab plus the four read-only OneNote tools and their access boundaries. |
+| 06: Registry and governance | Two-entry catalog, version routes, CORS/write rejection, redeployment and exact URL/command enterprise allowlist. |
+
+The default OneNote adapter uses desktop COM. The [optional Graph backend](#optional-graph-backend-register-and-configure-the-app) demonstrates delegated sign-in instead; these are distinct data-access designs, not interchangeable login settings.
+
+The catalog contains ADO and OneNote by default. It describes OneNote's manual local-checkout installation honestly: there is no published npm package or hosted OneNote endpoint. The standalone Hello World, text-notes and anonymous HTTP labs are not additional approved entries in this two-server workshop.
 
 ## Local Text-Notes Demo
 
@@ -49,13 +135,7 @@ npm run demo:notes
 
 The demo launches the real server as a child process, negotiates MCP using the official TypeScript SDK v2, discovers all three tool schemas, and calls the tools against the committed synthetic notes. It always selects [examples/notes](examples/notes), even if `NOTES_ROOT` is set in your shell. It prints requests and responses, uses no LLM, and closes the server when finished. These are real filesystem reads, not mocked tool responses.
 
-For an AI-driven demonstration in VS Code:
-
-1. Open this repository with GitHub Copilot Chat available.
-2. Open [.vscode/mcp.json](.vscode/mcp.json) and start **mcp-notes-demo** using its MCP Start action. Review the trust prompt before approving the server.
-3. In an agent-capable chat, enable its tools and ask: **"Use the notes MCP tools to find deployment guidance. Read the matching note, then answer with the relative filename and line numbers."**
-
-The Windows VS Code configuration explicitly selects the public example folder. The other server entries are separate registry/HTTP examples and are not needed for this demo.
+This is a standalone SDK lab, deliberately excluded from the current two-server Copilot configuration and enterprise allowlist. The Windows VS Code configuration selects ADO and OneNote instead. The generic text-notes user-configuration example below is for other deployments, not an instruction to bypass the workshop policy.
 
 ### What MCP Does Here
 
@@ -141,9 +221,19 @@ The entrypoint path above is a placeholder, not a required location. Other MCP h
 
 ## Read OneNote Through MCP
 
-The separate OneNote server uses delegated Microsoft Graph access and is **read-only**. It is not part of the anonymous Azure service or registry. It uses the official MCP TypeScript SDK v2 over stdio, MSAL Node device-code sign-in, and Graph's delegated `Notes.Read` permission. Access tokens stay in process memory; sign-in may be needed again after restarting the server.
+The default OneNote backend is **local Windows desktop COM**, selected by `ONENOTE_BACKEND=com`. The official MCP SDK v2 implements stdio; [src/onenote-com.ts](src/onenote-com.ts) invokes the read-only [PowerShell COM bridge](scripts/onenote-com.ps1). No Graph permission, Entra app registration, client secret, or device-code sign-in is needed for this backend.
 
-### Register and Configure the App
+Use the setup and `npm run demo:onenote` commands above. To choose another approved synthetic notebook explicitly, configure `ONENOTE_ALLOWED_NOTEBOOK_IDS` as a JSON array of 1-25 COM notebook IDs. COM IDs are not Graph IDs. Do not commit notebook IDs or note contents.
+
+Every call checks the notebook allowlist; section/page membership is verified before reading page content. The bridge only uses `GetHierarchy` and `GetPageContent`. It excludes recycle-bin sections, rejects oversized XML, disables XML external entities, and never requests binary page data. HTML is converted locally to bounded text without fetching images, links, or attachments. Limits are 1 MiB per XML response, 2,000 sections/pages per collection, 100 results per page, 20,000 text characters, and 30 seconds per bridge process. Errors are explicit MCP tool errors, not empty-success notebooks.
+
+OneNote desktop must be installed, registered for COM, and usable in the signed-in interactive Windows session; locked or unavailable notebooks fail visibly. The app can synchronize under its own settings, and the AI host may send returned text to its model provider. A local transport is not an OS sandbox or a guarantee that data stays on the PC. Use the synthetic fixture for demonstrations.
+
+These are documented desktop APIs, not a new cloud authentication flow: [Microsoft Learn: Application interface](https://learn.microsoft.com/office/client-developer/onenote/application-interface-onenote) and [enumerations](https://learn.microsoft.com/office/client-developer/onenote/enumerations-onenote-developer-reference). The setup script's fixture creation is separate from the runtime tools, which remain strictly read-only.
+
+### Optional Graph Backend: Register and Configure the App
+
+Set `ONENOTE_BACKEND=graph` when you need the delegated Microsoft Graph adapter rather than Windows desktop COM. This alternative uses MSAL Node device-code sign-in and Graph's delegated `Notes.Read` permission. Tokens remain in process memory; there is no persisted token cache. It is not connected by the default workshop configuration or deployed to the anonymous Azure service.
 
 1. In Microsoft Entra, register an app for the account type you use. Enable **Allow public client flows**; do not create a client secret.
 2. Add the Microsoft Graph **delegated** `Notes.Read` permission and complete any required user or administrator consent.
@@ -151,6 +241,7 @@ The separate OneNote server uses delegated Microsoft Graph access and is **read-
 4. Configure the environment variables in a private, user-level MCP configuration. Do not commit notebook IDs or a machine-specific client ID to this repository:
 
 ```powershell
+$env:ONENOTE_BACKEND = 'graph'
 $env:ONENOTE_CLIENT_ID = '00000000-0000-0000-0000-000000000000'
 $env:ONENOTE_TENANT_ID = 'organizations'
 $env:ONENOTE_ALLOWED_NOTEBOOK_IDS = '["NOTEBOOK-ID-FROM-GRAPH"]'
@@ -169,6 +260,7 @@ For a VS Code user-level MCP configuration, use this pattern and replace the ent
       "command": "node",
       "args": ["C:\\path\\to\\mcp-starter\\src\\onenote-stdio.ts"],
       "env": {
+        "ONENOTE_BACKEND": "graph",
         "ONENOTE_CLIENT_ID": "${input:oneNoteClientId}",
         "ONENOTE_TENANT_ID": "${input:oneNoteTenantId}",
         "ONENOTE_ALLOWED_NOTEBOOK_IDS": "${input:oneNoteNotebookIds}"
@@ -196,13 +288,62 @@ For other MCP hosts, launch the same entrypoint with the same environment variab
 
 Page HTML is parsed locally; scripts, styles, and external images/links are not executed or fetched. Graph responses are size-limited, pagination URLs are restricted to the expected Graph OneNote route, and throttling/authentication errors are surfaced. Notebook/page text is sent to the connected AI host and may be sent to its model provider; treat it as untrusted data and do not use private notebooks in public demos.
 
-The tests exercise the real MCP client/server stdio exchange and mocked Graph responses, including allowlist checks and HTML extraction. They do not perform a live Microsoft sign-in or Graph request; that requires an app registration, consent, and an account configured on the user's machine.
+Automated checks exercise the SDK, mocked Graph responses, COM client behavior, and the native PowerShell bridge with a fake desktop object. `npm run demo:onenote` separately verifies all four tools against the actual synthetic desktop notebook, including nonempty expected content and rejected notebook/page/input requests. Graph tests do not perform a live Microsoft sign-in or Graph request.
 
 ## How to Host a Registry
 
 ### What the Registry Does
 
 An MCP registry is a discovery catalog. It describes approved MCP servers and how clients can connect to them; it does not execute tools or proxy MCP traffic.
+
+```mermaid
+sequenceDiagram
+    participant Host as Copilot host
+    participant Registry as Your registry
+    participant Server as Approved MCP server
+    Host->>Registry: GET catalog and version metadata
+    Registry-->>Host: Server identity, transport and connection details
+    Note over Host,Server: Review trust, policy and provider sign-in
+    Host->>Server: MCP discovery and tool calls
+    Server-->>Host: Authorized result
+```
+
+### Run and Query the Registry Locally
+
+Start the registry in one terminal:
+
+```powershell
+npm run start:registry
+# Listening on http://127.0.0.1:3000
+```
+
+In a second terminal:
+
+```powershell
+$base = 'http://127.0.0.1:3000'
+$name = [uri]::EscapeDataString('io.github.melabadi/onenote-local')
+Invoke-RestMethod "$base/v0.1/servers?version=latest&limit=10"
+Invoke-RestMethod "$base/v0.1/servers/$name/versions/latest"
+Invoke-RestMethod "$base/v0.1/servers/$name/versions/1.0.0"
+Invoke-RestMethod "$base/v0.1/servers?search=onenote&version=latest"
+$response = Invoke-WebRequest "$base/v0.1/servers"
+$response.StatusCode
+$response.Headers
+```
+
+Expect two latest entries: **Azure DevOps (read-only demo)** and **OneNote Local COM (read-only)**, anonymous read/CORS headers, and no credentials. URL-encode the complete server name, including its slash. Follow `metadata.nextCursor` when the catalog spans multiple pages.
+
+The checked-in ADO URL is organization-neutral. To advertise your own organization locally without editing the shared catalog:
+
+```powershell
+$AdoOrganization = Read-Host 'Your Azure DevOps organization name'
+$env:ADO_MCP_URL = "https://mcp.dev.azure.com/$AdoOrganization"
+npm run start:registry
+```
+
+The registry only publishes this endpoint's metadata; it does not authenticate to ADO. Stop the process with Ctrl+C. Loopback HTTP is for local learning; [GitHub discovery requires a reachable HTTPS registry](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-mcp-usage/configure-mcp-registry).
+
+### Registry API Contract
 
 This repository contains a custom, read-only implementation backed by [registry/catalog.json](registry/catalog.json). It is intentionally smaller than the upstream MCP Registry publishing service. GitHub's [official registry guidance](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-mcp-usage/configure-mcp-registry) requires a self-hosted v0.1 registry to expose these HTTPS routes:
 
@@ -235,7 +376,7 @@ The implementation also supports version listing, name search, version filtering
 - Outbound access to npm, Microsoft Container Registry, and Azure.
 - GitHub Enterprise/Copilot entitlement and enterprise-owner access for the later GitHub configuration.
 
-The verified run used Node.js 22.20.0, Azure CLI 2.77.0, TypeScript 7.0.2, and MCP SDK 2.0.0. Dependency versions are locked in [package-lock.json](package-lock.json), and Azure Verified Module versions are pinned in [infra/main.bicep](infra/main.bicep) and [infra/apps.bicep](infra/apps.bicep). Local Docker is not required because ACR builds the image in Azure.
+Dependency versions are locked in [package-lock.json](package-lock.json), and Azure Verified Module versions are pinned in [infra/main.bicep](infra/main.bicep) and [infra/apps.bicep](infra/apps.bicep). Local Docker is not required because ACR builds the image in Azure. Neither OneNote nor Copilot is required to deploy the registry.
 
 ### Deploy This Registry to Azure
 
@@ -260,6 +401,7 @@ $SubscriptionId = (az account show --query id --output tsv).Trim()
 $ResourceGroup = 'rg-mcp-setup-demo'
 $Location = 'eastus2'
 $BaseName = 'mcp-setup'
+$AdoOrganization = Read-Host 'Your Azure DevOps organization name'
 $ImageTag = Get-Date -AsUTC -Format 'yyyyMMddHHmmss'
 ```
 
@@ -279,11 +421,12 @@ az provider register --subscription $SubscriptionId --namespace Microsoft.Operat
 [scripts/deploy.ps1](scripts/deploy.ps1) is the executable deployment record. It runs tests, protects against reusing an unrelated resource group, deploys the Bicep infrastructure, builds an image in ACR, resolves its immutable digest, and deploys the two Container Apps. Every failed native command stops the script.
 
 ```powershell
-./scripts/deploy.ps1 `
+.\scripts\deploy.ps1 `
   -SubscriptionId $SubscriptionId `
   -ResourceGroup $ResourceGroup `
   -Location $Location `
   -BaseName $BaseName `
+  -AdoOrganization $AdoOrganization `
   -ImageTag $ImageTag
 ```
 
@@ -298,9 +441,9 @@ The deployment creates:
 | Managed identity | Pulls the image without registry credentials | ACR-scoped `AcrPull` assignment |
 | Log Analytics | Collects Container Apps logs | 30-day retention and 0.1 GB daily ingestion cap |
 
-The same immutable image runs both applications. `SERVICE` selects the process, while `MCP_SERVER_URL` makes the registry advertise the server URL generated by this deployment.
+The same immutable image runs both applications. `SERVICE` selects the process; `ADO_MCP_URL` selects the provider endpoint using your required `AdoOrganization` parameter. There is no author-specific organization default in Bicep or the deployment script. The anonymous HTTP hosting example is deliberately not in the approved catalog. OneNote stays on the PC and is never added to the Azure HTTP service.
 
-The script writes the non-secret endpoints to the gitignored `.azure/deployment.json` file and prints values similar to:
+The script writes non-secret endpoints, including `adoMcpUrl`, to the gitignored `.azure/deployment.json` file and prints values similar to:
 
 ```text
 GitHub registry base URL: https://YOUR-REGISTRY.azurecontainerapps.io
@@ -310,36 +453,63 @@ MCP server URL: https://YOUR-SERVER.azurecontainerapps.io/mcp
 #### 4. Verify Before Using the Registry
 
 ```powershell
-node scripts/smoke.ts
+node .\scripts\smoke.ts
 ```
 
 From another machine, pass the endpoints explicitly:
 
 ```powershell
-node scripts/smoke.ts `
+node .\scripts\smoke.ts `
   --registry https://YOUR-REGISTRY.azurecontainerapps.io `
-  --server https://YOUR-SERVER.azurecontainerapps.io/mcp
+  --server https://YOUR-SERVER.azurecontainerapps.io/mcp `
+  --ado-url "https://mcp.dev.azure.com/$AdoOrganization"
 ```
 
-The smoke test checks registry list and version routes, CORS, rejected writes, server health, Origin validation, SDK tool discovery, tool calls, and invalid inputs. Wait for revision routing to settle and rerun it if a Container App has just been deployed. An ARM success alone does not prove the application is ready.
+The smoke test checks registry list and version routes against the source catalog with the configured ADO URL, follows catalog pagination, then checks CORS, rejected writes, server health, Origin validation, SDK tool discovery, tool calls, and invalid inputs. When run without endpoint arguments it uses `.azure/deployment.json`; an older deployment record may need `--ado-url` explicitly. Wait for revision routing to settle and rerun if a Container App has just been deployed. An ARM success alone does not prove the application is ready.
 
 Expected result: **5/5 checks passed**.
 
-![Registry API served by Azure](docs/images/03-azure-registry-api.png)
+Use the [verification checklist](docs/verification.md) to record your own results. Do not copy deployment addresses or account identifiers from screenshots or previous deployments.
 
-The [verification record](docs/verification.md) contains the original test endpoints, screenshots, CI run, and measured results. Those addresses are evidence, not values to reuse.
-
-### Maintain the Catalog
+### Add, Update, and Remove Catalog Entries
 
 1. Edit [registry/catalog.json](registry/catalog.json) through a reviewed change.
 2. Use a reverse-DNS server name such as `com.example/my-server`. Use a namespace you control for a real publication.
-3. Add either a remote `streamable-http` HTTPS endpoint or a pinned local package and transport. Never put credentials in catalog values.
+3. Advertise a real remote HTTPS endpoint or an actually published, pinned package. A local checkout may have a metadata-only entry with explicit setup instructions, as OneNote does here; it is not a one-click package installation. Never invent an npm package or put credentials/local notebook IDs in catalog values.
 4. Keep each name/version pair unique and exactly one version per server marked `isLatest: true`.
-5. Run `npm test`, `npm run typecheck`, deploy a fresh image tag, and rerun the smoke test.
+5. Update [tests/registry.test.ts](tests/registry.test.ts) and [tests/demo.test.ts](tests/demo.test.ts) when intentionally changing this starter's two-server example. The smoke check compares the live service to your source catalog rather than a hardcoded server count.
+6. Run `npm test`, `npm run typecheck`, deploy a fresh image tag, and rerun the smoke test before changing enterprise policy.
+
+For example, append an entry like this **only after replacing the example namespace and endpoint with one you control**:
+
+```json
+{
+  "server": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "name": "com.example/team-tools",
+    "title": "Team Tools",
+    "description": "Read-only tools for a team-owned service.",
+    "version": "1.0.0",
+    "remotes": [
+      { "type": "streamable-http", "url": "https://YOUR-SERVICE.example.com/mcp" }
+    ]
+  },
+  "_meta": {
+    "io.modelcontextprotocol.registry/official": {
+      "status": "active",
+      "publishedAt": "2026-11-02T00:00:00Z",
+      "updatedAt": "2026-11-02T00:00:00Z",
+      "isLatest": true
+    }
+  }
+}
+```
+
+To publish a new version, retain the previous entry, add the new name/version pair, mark only the new entry latest, and update its timestamp. Clients using a pinned version can still retrieve the older metadata. To remove an approval, review dependent clients and runtime policy as well as removing the catalog entry; editing discovery metadata is not revocation of backend access.
 
 Catalog changes take effect when the image is redeployed. GitHub's configured registry URL does not change when the Container App address remains the same.
 
-The demo URL is injected at startup. If you rename or remove `com.example/mcp-setup-demo`, also update its explicit lookup in [src/registry.ts](src/registry.ts), [scripts/smoke.ts](scripts/smoke.ts), and [tests/registry.test.ts](tests/registry.test.ts).
+The ADO override is implemented by `loadRegistryCatalog()` in [src/registry.ts](src/registry.ts), shared with the smoke check. If you rename the starter's ADO identity, update that lookup and its tests. Keep client headers and advertised catalog headers consistent. The local OneNote entry describes manual checkout installation and intentionally has no fictitious package or localhost HTTP endpoint.
 
 For a managed alternative, GitHub documents [Azure API Center as an MCP registry](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-mcp-usage/configure-mcp-registry#option-2-using-azure-api-center-as-an-mcp-registry). This walkthrough deliberately hosts the registry as application code.
 
@@ -348,13 +518,14 @@ For a managed alternative, GitHub documents [Azure API Center as an MCP registry
 Use a fresh image tag for every release:
 
 ```powershell
-./scripts/deploy.ps1 -SubscriptionId $SubscriptionId `
+.\scripts\deploy.ps1 -SubscriptionId $SubscriptionId `
   -ResourceGroup $ResourceGroup -Location $Location -BaseName $BaseName `
+  -AdoOrganization $AdoOrganization `
   -ImageTag (Get-Date -AsUTC -Format 'yyyyMMddHHmmss')
 node scripts/smoke.ts
 ```
 
-For an application rollback, resolve a previously verified image tag to its digest and redeploy [infra/apps.bicep](infra/apps.bicep) with that digest. Do **not** run `az acr build` with an old tag because that overwrites the old image. Infrastructure rollback requires a reviewed Bicep change.
+For an application rollback, resolve a previously verified image tag to its digest and redeploy [infra/apps.bicep](infra/apps.bicep) with that digest and the same required `adoOrganization` parameter. Do **not** run `az acr build` with an old tag because that overwrites the old image. Infrastructure rollback requires a reviewed Bicep change.
 
 Before deleting the registry, move GitHub to another working registry or deliberately revise the access policy. Deleting an active registry while leaving **Registry only** enabled breaks discovery.
 
@@ -386,22 +557,36 @@ az containerapp logs show --subscription $SubscriptionId --resource-group $Resou
 
 ### Configure the Enterprise Registry
 
-GitHub's [official configuration procedure](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-mcp-usage/restrict-based-on-registry) is the source of truth for current navigation and supported clients.
+GitHub recommends [enterprise managed allowlists](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-mcp-usage/configure-enterprise-allowlist) for execution controls. Registry-based restriction is a separate preview mechanism; a two-entry catalog alone is not proof that other runtime servers are blocked.
+
+Setup generates the gitignored `.local/managed-settings.json` with exactly two identity rules: the ADO organization URL and `["node","ABSOLUTE-CHECKOUT-PATH\\src\\onenote-stdio.ts"]`. Merge `allowedMcpServers` into the designated enterprise governance repository's `copilot/managed-settings.json`, preserving its existing model, centrally managed plugins, marketplaces, and other policies. Do not use a user-chosen `serverName` as an identity check or allow every `node` command. The concrete path intentionally authorizes only this demo installation; other installations need reviewed exact commands.
+
+For example, the generated policy has this shape; replace both placeholders before deploying it:
+
+```json
+{
+  "allowedMcpServers": [
+    { "serverUrl": "https://mcp.dev.azure.com/YOUR-ORGANIZATION" },
+    { "serverCommand": ["node", "C:\\YOUR-CHECKOUT\\src\\onenote-stdio.ts"] }
+  ]
+}
+```
+
+In the enterprise's designated `.github-private` repository, merge these rules into `copilot/managed-settings.json` and publish through your normal review process. This starter never writes enterprise settings for you. Restart/refresh supported clients and verify approved connections **and** a blocked, harmless unapproved server before declaring enforcement. See [the policy verification checklist](docs/verification.md#5-verify-effective-client-policy).
+
+Documented limitations: only supported clients receiving the enterprise's Copilot seat and managed settings enforce this policy; multiple sources intersect allowlists, and deny rules take precedence. First-party default MCPs are exempt from these enterprise lists. The demo launcher disables those defaults and all other configured servers locally to achieve exactly two enabled MCPs for the presentation. Managed settings are not an OS sandbox or authorization to ADO/OneNote data.
+
+For discovery and the legacy policy migration:
 
 1. Open **your enterprise > AI Controls > MCP**. On GHE.com, use the enterprise's own hostname.
 2. Record the existing registry URL and policy. If **Registry only** is enabled, migrate approved entries before replacing the URL.
 3. Set **MCP servers in Copilot** to **Enabled everywhere**. Leave unrelated enterprise policies unchanged.
 4. Enter the **registry base URL** printed by the deployment script in **MCP Registry URL**, then select **Save**.
-5. Choose **Allow all** to provide registry discovery without blocking other servers, or **Registry only** to restrict supported clients to catalog identities.
+5. After validating delivery of the managed allowlist, select **Allow all** for the old registry restriction to avoid conflicting execution policies. Keep the two-entry registry URL for discovery. Do not remove the old restriction before the replacement policy is available.
 6. Reload the page and verify that the URL and policy persisted.
 
 > [!WARNING]
 > Enter the registry base URL, not `/v0.1/servers`, `/mcp`, an ACR URL, or a raw JSON URL. GitHub appends the v0.1 routes. Never place a personal access token or another credential in the URL.
-
-> [!NOTE]
-> The current URL below is intentionally visible because it is a public, credential-free registry endpoint. The legacy screenshot later in this section is intentionally redacted because its raw-file URL contained an access token.
-
-![Current public registry URL saved with the existing policy retained](docs/images/02-github-enterprise-registry.png)
 
 ### Understand the Policy Boundary
 
@@ -411,49 +596,27 @@ An organization owner can configure a registry under **Organization Settings > C
 
 Supported surfaces and enforcement behavior change over time. Check GitHub's [MCP private registry enforcement reference](https://docs.github.com/en/copilot/reference/enterprise-administrators/mcp-private-registry-enforcement) before rollout. Do not assume an enterprise registry configures Copilot cloud agent or every other Copilot surface in the same way.
 
-### Preserve Existing Catalog Entries
-
-The test enterprise previously used a token-bearing raw JSON URL that returned 404. Its one entry, `com.executeautomation/playwright-mcp-server`, was recovered through the authenticated browser and preserved in [registry/catalog.json](registry/catalog.json). The demo was added as a second entry.
-
-The inherited package was not installed, executed, upgraded, or endorsed. A later package lookup returned 404, so treat it as historical migration data and review or replace it before adopting this catalog. The former token is absent from the repository and screenshots; its owner should revoke it if it remains valid elsewhere.
-
-![Legacy registry URL redacted because it contained an access token](docs/images/01-github-mcp-before.png)
-
 ### Verify in VS Code
 
-The workspace's [.vscode/mcp.json](.vscode/mcp.json) prompts for your deployment's `mcpServerUrl`. A fixed remote configuration is equivalent to:
-
-```json
-{
-  "servers": {
-    "com.example/mcp-setup-demo": {
-      "type": "http",
-      "url": "https://YOUR-SERVER.azurecontainerapps.io/mcp"
-    }
-  }
-}
-```
+The workspace's [.vscode/mcp.json](.vscode/mcp.json) contains only remote **azure-devops** and stdio **onenote-local**. Enter your own ADO organization when prompted. For OneNote, supply the JSON array containing the synthetic `notebookId` from your generated `.local/onenote-demo.json`. Keep those local values out of shared configuration.
 
 In VS Code:
 
 1. Sign into the account whose Copilot seat comes from the configured enterprise.
 2. Open the Extensions view and search for `@mcp`, or run **MCP: List Servers**.
 3. Review the server configuration and trust prompt before starting it.
-4. Select the demo tools in Chat and ask: **Use the MCP Setup Demo greet tool with name GitHub.**
+4. Start **onenote-local**, select its tools, and ask: **List the approved notebooks, then read the MCP Workshop Demo page.** Start ADO separately and complete its provider sign-in.
 
 Expected result:
 
 ```text
-Hello, GitHub! Your MCP server is connected.
+One approved notebook: MCP Workshop Demo
+The page contains: MCP_WORKSHOP_PUBLIC_FIXTURE_V1
 ```
 
 Microsoft's [VS Code MCP documentation](https://code.visualstudio.com/docs/agent-customization/mcp-servers) distinguishes workspace and profile configuration and warns that local MCP servers can run arbitrary code. Only start servers from trusted sources and inspect their configuration first.
 
-The test enterprise successfully displayed both entries in the VS Code `@mcp` gallery:
-
-![VS Code displaying both enterprise MCP registry entries](docs/images/05-vscode-enterprise-mcp-gallery.png)
-
-This screenshot proves registry retrieval and rendering, not installation, startup, or tool invocation. For failures, use **MCP: List Servers > Show Output** and check the selected account, policy refresh, trust state, and enabled tools.
+Registry gallery visibility proves discovery only, not installation, startup, or tool invocation. For failures, use **MCP: List Servers > Show Output** and check the selected account, policy refresh, trust state, and enabled tools.
 
 ## How MCP Works
 
@@ -582,7 +745,7 @@ Environment handling is centralized in [src/main.ts](src/main.ts):
 | --- | --- |
 | `SERVICE` | Selects `server` or `registry`; the same image supports both |
 | `HOST`, `PORT` | Control the bind address; local defaults are loopback-only |
-| `MCP_SERVER_URL` | Overrides the demo catalog entry and is required for a publicly bound registry |
+| `ADO_MCP_URL` | Approved `https://mcp.dev.azure.com/ORGANIZATION` URL; required for a publicly bound registry |
 | `ALLOWED_HOSTS` | Adds comma-separated hostnames accepted by Host validation |
 | `ALLOWED_ORIGIN_HOSTS` | Controls accepted browser Origin hostnames |
 | `CONTAINER_APP_HOSTNAME` | Adds the Azure-provided hostname to Host validation |
@@ -591,24 +754,23 @@ Remote catalog URLs must use HTTPS and must not contain credentials. Host and Or
 
 ### Deploy the Server
 
-For the first deployment, follow [Deploy This Registry to Azure](#deploy-this-registry-to-azure). The repository deploys the registry and server together so the catalog can advertise the generated server URL.
+For the first deployment, follow [Deploy This Registry to Azure](#deploy-this-registry-to-azure). The repository deploys the registry and standalone HTTP server together, but the current catalog approves only ADO and local OneNote.
 
 After changing a tool, redeploy with a fresh image tag:
 
 ```powershell
 $ImageTag = Get-Date -AsUTC -Format 'yyyyMMddHHmmss'
-./scripts/deploy.ps1 `
+.\scripts\deploy.ps1 `
   -SubscriptionId $SubscriptionId `
   -ResourceGroup $ResourceGroup `
   -Location $Location `
   -BaseName $BaseName `
+  -AdoOrganization $AdoOrganization `
   -ImageTag $ImageTag
 node scripts/smoke.ts
 ```
 
 The deployment uses ACR cloud build and pins the Container Apps revision to the resulting image digest. The container runs as the non-root `node` user. The server has 0.25 CPU, 0.5 GiB memory, health probes, HTTPS-only ingress, and a maximum of one replica.
-
-![Azure-hosted MCP server health endpoint](docs/images/04-azure-server-health.png)
 
 ### Production Controls
 
@@ -629,7 +791,7 @@ ACR Basic has a standing charge. ACR builds, Container Apps usage beyond include
 | `GET /mcp` does not look healthy | Use `/healthz`; `/mcp` is a protocol endpoint and should be tested with the SDK smoke test. |
 | SDK rejects Host or Origin | Check the runtime hostname variables and SDK guards. Do not disable validation globally. |
 | VS Code shows no tools | Check server trust, enabled tools, selected GitHub account, enterprise policy, and **MCP: List Servers > Show Output**. |
-| A local server is blocked | Confirm its canonical ID exists in the approved registry when **Registry only** is enabled. Do not rename an unrelated server to bypass policy. |
+| A local server is blocked | Check the exact command and every argument in the effective managed allowlist, selected enterprise account, policy refresh, and any remaining legacy registry restriction. Do not rename a server to bypass policy. |
 | A new revision is not serving | Inspect `latestReadyRevisionName`, Container App logs, and traffic routing, then rerun the smoke test. |
 
 ## Official Sources

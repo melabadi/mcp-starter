@@ -1,32 +1,33 @@
 {
   "servers": {
-    "mcp-notes-demo": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["${workspaceFolder}\\src\\notes-stdio.ts"],
-      "env": {
-        "NOTES_ROOT": "${workspaceFolder}\\examples\\notes"
+    "azure-devops": {
+      "type": "http",
+      "url": "https://mcp.dev.azure.com/${input:adoOrganization}",
+      "headers": {
+        "X-MCP-Readonly": "true",
+        "X-MCP-Tools": "core_list_projects,wit_work_item,repo_pull_request"
       }
     },
-    "com.example/mcp-setup-demo": {
-      "type": "http",
-      "url": "${input:mcpServerUrl}"
-    },
-    "mcp-setup-local": {
+    "onenote-local": {
       "type": "stdio",
       "command": "node",
-      "args": ["${workspaceFolder}/src/stdio.ts"]
-    },
-    "mcp-setup-http": {
-      "type": "http",
-      "url": "http://127.0.0.1:3001/mcp"
+      "args": ["${workspaceFolder}\\src\\onenote-stdio.ts"],
+      "env": {
+        "ONENOTE_BACKEND": "com",
+        "ONENOTE_ALLOWED_NOTEBOOK_IDS": "${input:oneNoteNotebookIds}"
+      }
     }
   },
   "inputs": [
     {
-      "id": "mcpServerUrl",
+      "id": "adoOrganization",
       "type": "promptString",
-      "description": "MCP server HTTPS URL from your deployment, including /mcp"
+      "description": "Your Entra-backed Azure DevOps organization name, not a project or URL"
+    },
+    {
+      "id": "oneNoteNotebookIds",
+      "type": "promptString",
+      "description": "JSON array of approved local OneNote COM notebook IDs from .local\\onenote-demo.json"
     }
   ]
 }

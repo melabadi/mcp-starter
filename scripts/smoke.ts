@@ -6,12 +6,13 @@ import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { createMcpHttpServer } from '../src/mcp-server.ts';
-import { createRegistryServer } from '../src/registry.ts';
+import { createRegistryServer, loadRegistryCatalog } from '../src/registry.ts';
 
 const { values } = parseArgs({ options: {
   local: { type: 'boolean', default: false },
   registry: { type: 'string' },
   server: { type: 'string' },
+  'ado-url': { type: 'string' },
   output: { type: 'string' },
 } });
 const localServers: Server[] = [];
@@ -45,9 +46,16 @@ async function get(url: string, options: RequestInit = {}) {
 try {
   let registryUrl: string;
   let mcpServerUrl: string;
+  let adoMcpUrl = values['ado-url'] ?? process.env.ADO_MCP_URL;
+  if ((values.registry === undefined) !== (values.server === undefined)) {
+    throw new Error('Provide both --registry and --server, or neither to use .azure/deployment.json.');
+  }
+  if (values.local && values.registry) {
+    throw new Error('Use --local or explicit deployment endpoints, not both.');
+  }
   if (values.local) {
     mcpServerUrl = `${await listen(createMcpHttpServer())}/mcp`;
-    registryUrl = await listen(createRegistryServer(mcpServerUrl));
+    registryUrl = await listen(createRegistryServer(adoMcpUrl));
   } else if (values.registry && values.server) {
     registryUrl = values.registry;
     mcpServerUrl = values.server;
@@ -55,7 +63,9 @@ try {
     const deployment = JSON.parse(readFileSync(new URL('../.azure/deployment.json', import.meta.url), 'utf8'));
     registryUrl = deployment.registryUrl;
     mcpServerUrl = deployment.mcpServerUrl;
+    adoMcpUrl ??= deployment.adoMcpUrl;
   }
+  const expected = loadRegistryCatalog(adoMcpUrl);
   registryUrl = registryUrl.replace(/\/$/, '');
   for (const endpoint of [registryUrl, mcpServerUrl]) {
     const url = new URL(endpoint);
@@ -63,27 +73,45 @@ try {
     assert.ok(!url.username && !url.password && !url.search && !url.hash, 'Endpoints must not include secrets.');
   }
 
-  await check('Registry discovery, version routes, and preserved catalog', async () => {
-    const response = await get(`${registryUrl}/v0.1/servers?version=latest`);
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get('access-control-allow-origin'), '*');
-    const catalog = await response.json();
-    const expected = JSON.parse(readFileSync(new URL('../registry/catalog.json', import.meta.url), 'utf8'));
-    assert.equal(catalog.metadata.count, expected.length);
+  await check('Registry discovery, version routes, and source-controlled catalog', async () => {
+    const latest = expected.filter((entry) => entry._meta['io.modelcontextprotocol.registry/official'].isLatest);
+    const actualEntries: unknown[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const url = new URL(`${registryUrl}/v0.1/servers`);
+      url.searchParams.set('version', 'latest');
+      url.searchParams.set('limit', '100');
+      if (cursor) url.searchParams.set('cursor', cursor);
+      const response = await get(url.href);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('access-control-allow-origin'), '*');
+      const catalog = await response.json();
+      assert.ok(Array.isArray(catalog.servers));
+      assert.equal(catalog.metadata.count, catalog.servers.length);
+      actualEntries.push(...catalog.servers);
+      assert.ok(actualEntries.length <= latest.length, 'Registry contains unapproved entries.');
+      cursor = catalog.metadata.nextCursor;
+      if (cursor !== undefined) {
+        assert.ok(typeof cursor === 'string' && cursor.length > 0 && !seenCursors.has(cursor), 'Invalid registry pagination.');
+        seenCursors.add(cursor);
+      }
+    } while (cursor !== undefined);
+    assert.deepEqual(actualEntries, latest);
     for (const entry of expected) {
       const name = encodeURIComponent(entry.server.name);
       for (const version of ['latest', entry.server.version]) {
         const versionResponse = await get(`${registryUrl}/v0.1/servers/${name}/versions/${encodeURIComponent(version)}`);
         assert.equal(versionResponse.status, 200);
         const actual = (await versionResponse.json()).server;
-        if (entry.server.name === 'com.example/mcp-setup-demo') {
-          assert.equal(actual.remotes[0].url, mcpServerUrl);
-        } else {
-          assert.deepEqual(actual, entry.server);
-        }
+        const expectedVersion = version === 'latest'
+          ? latest.find((candidate) => candidate.server.name === entry.server.name)
+          : entry;
+        assert.ok(expectedVersion, `Missing latest catalog entry for ${entry.server.name}.`);
+        assert.deepEqual(actual, expectedVersion.server);
       }
     }
-    return { entries: catalog.servers.map((entry: { server: { name: string } }) => entry.server.name) };
+    return { entries: latest.map((entry) => entry.server.name) };
   });
 
   await check('Registry CORS preflight and write rejection', async () => {

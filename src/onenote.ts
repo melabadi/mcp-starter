@@ -4,7 +4,7 @@ const GRAPH_ORIGIN = 'https://graph.microsoft.com';
 const GRAPH_VERSION = 'v1.0';
 const MAX_NOTEBOOKS = 25;
 const MAX_HTML_BYTES = 1024 * 1024;
-const MAX_PAGE_TEXT = 20_000;
+export const MAX_PAGE_TEXT = 20_000;
 const MAX_RETRIES = 2;
 const MAX_AUTOMATIC_RETRY_DELAY_MS = 5_000;
 
@@ -39,6 +39,19 @@ export interface PageText {
   lastModifiedDateTime?: string;
   text: string;
   truncated: boolean;
+}
+
+export interface OneNoteClient {
+  listNotebooks(): Promise<OneNoteNotebook[]>;
+  listSections(notebookId: string, limit: number, cursor?: string): Promise<{
+    sections: OneNoteSection[];
+    nextCursor: string | null;
+  }>;
+  listPages(notebookId: string, sectionId: string, limit: number, cursor?: string): Promise<{
+    pages: OneNotePage[];
+    nextCursor: string | null;
+  }>;
+  readPage(notebookId: string, pageId: string): Promise<PageText>;
 }
 
 interface GraphCollection<T> {
@@ -407,7 +420,7 @@ export class OneNoteGraphClient {
 
 type HtmlNode = DefaultTreeAdapterTypes.Node;
 
-function extractPageText(html: string): { text: string; truncated: boolean } {
+export function extractPageText(html: string): { text: string; truncated: boolean } {
   const document = parse(html);
   const output: string[] = [];
   let characterCount = 0;
@@ -419,12 +432,10 @@ function extractPageText(html: string): { text: string; truncated: boolean } {
     if ('value' in node) {
       const value = node.value.replace(/\s+/gu, ' ');
       if (!value) return;
-      characterCount += value.length;
-      if (characterCount > MAX_PAGE_TEXT + 1) {
-        truncated = true;
-        return;
-      }
-      output.push(value);
+      const excerpt = value.slice(0, MAX_PAGE_TEXT + 1 - characterCount);
+      output.push(excerpt);
+      characterCount += excerpt.length;
+      if (excerpt.length < value.length) truncated = true;
       return;
     }
     if ('tagName' in node && ignoredTags.has(node.tagName)) return;
@@ -445,20 +456,12 @@ function extractPageText(html: string): { text: string; truncated: boolean } {
   };
 }
 
-export function parseOneNoteConfig(env: NodeJS.ProcessEnv = process.env): OneNoteConfig {
-  const clientId = env.ONENOTE_CLIENT_ID?.trim() ?? '';
-  const tenantId = env.ONENOTE_TENANT_ID?.trim() || 'organizations';
+export function parseAllowedNotebookIds(env: NodeJS.ProcessEnv = process.env): string[] {
   let allowedNotebookIds: unknown;
   try {
     allowedNotebookIds = JSON.parse(env.ONENOTE_ALLOWED_NOTEBOOK_IDS ?? '');
   } catch {
     throw new OneNoteError('ONENOTE_ALLOWED_NOTEBOOK_IDS must be a JSON array of notebook IDs.');
-  }
-  if (!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/iu.test(clientId)) {
-    throw new OneNoteError('ONENOTE_CLIENT_ID must be an application client ID in GUID format.');
-  }
-  if (!/^[a-z0-9.-]{1,253}$/iu.test(tenantId) || tenantId.includes('..')) {
-    throw new OneNoteError('ONENOTE_TENANT_ID must be a tenant ID, domain, or organizations.');
   }
   if (!Array.isArray(allowedNotebookIds) || allowedNotebookIds.length < 1
     || allowedNotebookIds.length > MAX_NOTEBOOKS
@@ -467,6 +470,19 @@ export function parseOneNoteConfig(env: NodeJS.ProcessEnv = process.env): OneNot
     throw new OneNoteError(
       `ONENOTE_ALLOWED_NOTEBOOK_IDS must be a JSON array of 1-${MAX_NOTEBOOKS} unique notebook IDs.`,
     );
+  }
+  return allowedNotebookIds;
+}
+
+export function parseOneNoteConfig(env: NodeJS.ProcessEnv = process.env): OneNoteConfig {
+  const allowedNotebookIds = parseAllowedNotebookIds(env);
+  const clientId = env.ONENOTE_CLIENT_ID?.trim() ?? '';
+  const tenantId = env.ONENOTE_TENANT_ID?.trim() || 'organizations';
+  if (!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/iu.test(clientId)) {
+    throw new OneNoteError('ONENOTE_CLIENT_ID must be an application client ID in GUID format.');
+  }
+  if (!/^[a-z0-9.-]{1,253}$/iu.test(tenantId) || tenantId.includes('..')) {
+    throw new OneNoteError('ONENOTE_TENANT_ID must be a tenant ID, domain, or organizations.');
   }
   return { clientId, tenantId, allowedNotebookIds };
 }

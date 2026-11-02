@@ -31,14 +31,14 @@ function az {
         'acr repository show *' { if ($env:DEPLOY_TEST_CASE -eq 'bad-digest') { 'invalid' } else { 'sha256:' + ('a' * 64) }; break }
         'deployment group create *infra/apps.bicep*' {
             if ($env:DEPLOY_TEST_CASE -eq 'apps-failure') { $global:LASTEXITCODE = 1; break }
-            '{"registryUrl":"https://registry.example.com","mcpServerUrl":"https://server.example.com/mcp","serverName":"mcp-setup-server","registryAppName":"mcp-setup-registry"}'
+            '{"registryUrl":"https://registry.example.com","mcpServerUrl":"https://server.example.com/mcp","adoMcpUrl":"https://mcp.dev.azure.com/test-org","serverName":"mcp-setup-server","registryAppName":"mcp-setup-registry"}'
             break
         }
         default { throw "Unexpected Azure command: $command" }
     }
 }
 Set-Location $env:DEPLOY_TEST_ROOT
-& $env:DEPLOY_TEST_SCRIPT -SubscriptionId test-subscription -ImageTag test-release
+& $env:DEPLOY_TEST_SCRIPT -SubscriptionId test-subscription -AdoOrganization test-org -ImageTag test-release
 `;
 
 test('deployment script uses direct commands and stops before unsafe follow-up work', async (context) => {
@@ -60,6 +60,8 @@ test('deployment script uses direct commands and stops before unsafe follow-up w
           const deployment = JSON.parse(readFileSync(join(root, '.azure/deployment.json'), 'utf8'));
           assert.equal(deployment.registryUrl, 'https://registry.example.com');
           assert.equal(deployment.mcpServerUrl, 'https://server.example.com/mcp');
+          assert.equal(deployment.adoMcpUrl, 'https://mcp.dev.azure.com/test-org');
+          assert.match(result.stderr, /adoOrganization=test-org/);
           assert.match(result.stderr, /image=testacr\.azurecr\.io\/mcp-setup@sha256:a{64}/);
           for (const command of result.stderr.split('\n').filter((line) => line.startsWith('az '))) {
             assert.ok(command.includes('--subscription test-subscription'), command);

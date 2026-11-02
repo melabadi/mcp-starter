@@ -10,8 +10,8 @@ const port = Number(process.env.PORT ?? (service === 'registry' ? 3000 : 3001));
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer from 1 to 65535.');
 }
-if (service === 'registry' && host === '0.0.0.0' && !process.env.MCP_SERVER_URL) {
-  throw new Error('MCP_SERVER_URL is required when hosting the registry publicly.');
+if (service === 'registry' && host === '0.0.0.0' && !process.env.ADO_MCP_URL) {
+  throw new Error('ADO_MCP_URL is required when hosting the registry publicly.');
 }
 const allowedHosts = [
   'localhost', '127.0.0.1', '[::1]',
@@ -20,7 +20,7 @@ const allowedHosts = [
 ].map((value) => value.trim()).filter(Boolean);
 
 const server = service === 'registry'
-  ? createRegistryServer(process.env.MCP_SERVER_URL)
+  ? createRegistryServer(process.env.ADO_MCP_URL)
   : createMcpHttpServer({
     allowedHosts,
     allowedOriginHosts: process.env.ALLOWED_ORIGIN_HOSTS?.split(',').map((value) => value.trim()),

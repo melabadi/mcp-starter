@@ -1,133 +1,140 @@
-# Deployment Verification
+# Verify Your MCP Setup
 
-Recorded on **16 September 2026**. See the [walkthrough](../README.md) for repeatable instructions. Screenshots were captured from the integrated VS Code browser, not recreated mockups.
+Use this checklist for your own checkout, deployment, and Copilot accounts. A saved registry URL, a successful Azure deployment, or a green server health endpoint does not by itself prove that tools work or policy blocks unapproved servers.
 
-This is a historical record of a disposable test Azure tenant and test GitHub enterprise, not a set of configuration values for readers to reuse. The commands below describe the original deployed revision. For the current simplified deployment steps, use [scripts/deploy.ps1](../scripts/deploy.ps1) and the [current walkthrough](../README.md#deploy-this-registry-to-azure).
+All commands below run from the repository root in PowerShell. See the [walkthrough](../README.md) for prerequisites and setup.
 
-## Outcome
+## 1. Validate the Source
 
-- Deployed the MCP registry and demo server as separate Azure Container Apps in `rg-mcp-setup-demo`, `eastus2`.
-- Built the image using `az acr build`; deployed it by digest with managed-identity ACR pulls.
-- Replaced the enterprise registry URL only after the live API and SDK checks passed.
-- Reloaded the enterprise settings page and verified the saved URL persisted.
-- Preserved **MCP servers in Copilot: Enabled everywhere** and **Restrict MCP access to registry servers: Registry only**.
-- Preserved the pre-existing Playwright catalog entry exactly and added the demo. No former raw-file token was persisted in this repository.
-- Signed into VS Code with a Copilot seat supplied by the test enterprise and confirmed that both registry entries appeared in the `@mcp` gallery.
-
-## Live Endpoints
-
-| Service | URL |
-| --- | --- |
-| GitHub registry base URL | https://mcp-setup-registry.thankfulplant-7b59e5ca.eastus2.azurecontainerapps.io |
-| Catalog API | https://mcp-setup-registry.thankfulplant-7b59e5ca.eastus2.azurecontainerapps.io/v0.1/servers |
-| MCP transport | https://mcp-setup-server.thankfulplant-7b59e5ca.eastus2.azurecontainerapps.io/mcp |
-| MCP health | https://mcp-setup-server.thankfulplant-7b59e5ca.eastus2.azurecontainerapps.io/healthz |
-
-The successful live smoke report was generated at **2026-09-16T16:45:06.532Z**. Its [JSON evidence](evidence/live-verification.json) contains the endpoints, exact check names, approved server IDs, and SDK tool results.
-
-## Checks
-
-| Check | Result |
-| --- | --- |
-| `npm test` at the original deployment | 4 tests passed: [registry contract and URL safety](../tests/registry.test.ts), [HTTP protocol modes and stdio](../tests/server.test.ts) |
-| `npm run typecheck` | Passed before the deployed image build; final source is also checked before publication |
-| [Base Bicep](../infra/main.bicep) compilation and ARM validation | Passed |
-| [App Bicep](../infra/apps.bicep) compilation and ARM validation | Passed |
-| ACR image build using [Dockerfile](../Dockerfile) | Passed; runs `npm ci --omit=dev --ignore-scripts` |
-| Original deployment script | Passed with release tag `20260916-02`; its former stage options have since been removed |
-| Hosted GitHub Actions validation | [Run 209944546 passed](https://ms-mcaps-fantastic4.ghe.com/GHU-Recap/MCP-Setup/actions/runs/209944546) for initial commit `1f4b125` |
-| Live registry list and version routes | Passed for both entries, including URL-encoded names |
-| Live CORS preflight and write rejection | Passed: OPTIONS 204, writes 405 |
-| Live server health and Origin rejection | Passed: health 200, untrusted Origin 403 |
-| Live SDK discovery and tool calls | Passed for `legacy` and `auto` negotiation modes |
-| Live invalid tool input | Rejected by the SDK/schema validation |
-| Enterprise settings persistence | Confirmed after browser reload |
-| VS Code enterprise registry display | Confirmed: **MCP Setup Demo** and **Playwright MCP Server** appeared in the `@mcp` gallery |
-| Resolved dependency advisory check | No known CVEs found in the 21 scanned coordinates |
-
-The [advisory output](evidence/dependency-advisories.json) is an empty findings array. It covers the resolved production dependencies plus selected development tooling on the validation host. Optional compiler binaries for other operating systems were not individually scanned. The npm install/build audits also reported zero known vulnerabilities. This is point-in-time evidence, not proof that all dependencies are safe.
-
-## Deployment Script Simplification
-
-[scripts/deploy.ps1](../scripts/deploy.ps1) now uses direct `az` commands, with no helper functions or stage dispatcher. Subscription selection, resource-group ownership checks, command-failure checks, and digest-pinned app deployments are retained. Provider registration is an explicit [one-time prerequisite](../README.md#2-sign-in-and-choose-settings).
-
-[tests/deploy.test.ts](../tests/deploy.test.ts) executes the PowerShell script with fake `az` and `npm` commands. It checks the successful command flow and endpoint output, plus test failure, unrelated resource group, infrastructure failure, build failure, invalid digest, and app-deployment failure. These checks do not call Azure or change the active enterprise registry. They run as part of `npm test`; the rewritten script has **not** been redeployed to the live test environment as part of this change.
-
-## Azure Inventory
-
-| Resource | Type / Configuration |
-| --- | --- |
-| `mcp-setup-env` | Public Container Apps environment, Consumption profile |
-| `mcp-setup-registry` | Registry app; HTTPS-only external ingress on container port 3000 |
-| `mcp-setup-server` | MCP app; HTTPS-only external ingress on container port 3000 |
-| `mcpbhqv5astiufa2` | Azure Container Registry, Basic, admin account disabled |
-| `mcp-setup-pull` | User-assigned identity, ACR-scoped `AcrPull` |
-| `mcp-setup-logs` | Log Analytics, 30-day retention, 0.1 GB ingestion cap |
-
-Both apps use 0.25 CPU, 0.5 GiB memory, and 0-1 replicas. The verified ready server revision was `mcp-setup-server--0000001`; registry traffic was confirmed to route 100% to its latest ready revision.
-
-Image deployed:
-
-```text
-mcpbhqv5astiufa2.azurecr.io/mcp-setup@sha256:b841e3c7aa06896cbb1f383f041f2bfbffcc5ed2423f61687e0c5dc4e84788fd
+```powershell
+npm ci --ignore-scripts
+npm test
+npm run typecheck
+npm run demo:hello
+npm run demo:notes
+node .\scripts\smoke.ts --local
 ```
 
-The ACR build's Node base image digest was:
+Expected outcomes:
 
-```text
-node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
+- Tests and TypeScript checks pass.
+- Hello World discovers the tool, receives the exact greeting, and rejects invalid input.
+- The text-notes demo discovers and reads committed synthetic examples, not your personal files.
+- The smoke check reports **5/5 checks passed** and closes its temporary HTTP services.
+
+The test suite includes registry routing, metadata, pagination, CORS/write rejection, real SDK stdio and HTTP exchanges, invalid inputs, OneNote access boundaries, HTML extraction limits, and PowerShell deployment failure paths. Mocked Graph/COM tests are not evidence of live Microsoft sign-in or desktop access.
+
+GitHub Actions runs tests and typecheck on Windows and Linux and compiles Bicep on Linux. Check the run for your commit rather than relying on an old successful run.
+
+## 2. Verify Catalog Discovery
+
+Start `npm run start:registry` in another terminal, then:
+
+```powershell
+$base = 'http://127.0.0.1:3000'
+$name = [uri]::EscapeDataString('io.github.melabadi/onenote-local')
+Invoke-RestMethod "$base/v0.1/servers?version=latest&limit=10"
+Invoke-RestMethod "$base/v0.1/servers/$name/versions/latest"
+Invoke-RestMethod "$base/v0.1/servers/$name/versions/1.0.0"
 ```
 
-## Screenshots
+Check that:
 
-### Enterprise Before Migration
+- The default catalog has exactly the ADO and OneNote entries in [catalog.json](../registry/catalog.json).
+- The ADO URL and read-only headers match your intended organization/setup.
+- OneNote is described as a manual local checkout, not a nonexistent npm package or hosted endpoint.
+- Latest/version routes return the intended entry, unknown versions return 404, CORS permits anonymous reads, and writes return 405.
+- Pagination is complete before you report a full inventory.
 
-The registry URL field is masked because the old value contained an access token. The later saved-configuration screenshot leaves the replacement URL visible because that endpoint is public and credential-free. The different treatment is intentional, and the existing enforcement policy was retained.
+The ADO entry in source uses the documented organization-neutral endpoint. `ADO_MCP_URL` selects an organization-specific endpoint at registry startup. The registry does not connect to either server during discovery.
 
-![Original enterprise settings with sensitive URL masked](images/01-github-mcp-before.png)
+## 3. Verify Your Azure Deployment
 
-### Saved Enterprise Configuration
+After running [deploy.ps1](../scripts/deploy.ps1) with your own subscription and `-AdoOrganization`, use the generated endpoint record:
 
-The new credential-free Azure base URL persisted after reloading the page. The policy remains **Registry only**.
+```powershell
+node .\scripts\smoke.ts --output .\.azure\verification.json
+```
 
-![Saved enterprise MCP registry configuration](images/02-github-enterprise-registry.png)
+From another checkout, pass all deployment-specific values:
 
-### Azure Registry Response
+```powershell
+$AdoOrganization = Read-Host 'Your Azure DevOps organization name'
+node .\scripts\smoke.ts `
+  --registry https://YOUR-REGISTRY.azurecontainerapps.io `
+  --server https://YOUR-SERVER.azurecontainerapps.io/mcp `
+  --ado-url "https://mcp.dev.azure.com/$AdoOrganization" `
+  --output .\.azure\verification.json
+```
 
-The live `/v0.1/servers` response lists the demo and the preserved Playwright entry. The browser displays the service's actual JSON response.
+Expect **5/5 checks passed**. Inspect the report for the exact catalog identities, HTTP behavior and SDK tool calls. The comparison uses your source catalog plus the configured ADO URL; it must not accept an unrelated catalog merely because the server count matches.
 
-![Live registry JSON](images/03-azure-registry-api.png)
+In Azure, confirm the latest revision is ready and traffic reaches the intended immutable image:
 
-### Azure Server Health
+```powershell
+az containerapp show --subscription $SubscriptionId `
+  --resource-group $ResourceGroup --name "$BaseName-registry" `
+  --query "{ready:properties.latestReadyRevisionName,latest:properties.latestRevisionName,image:properties.template.containers[0].image,traffic:properties.configuration.ingress.traffic}"
+```
 
-The live health endpoint identifies the service, Streamable HTTP endpoint, and two tools. Protocol success is established separately by the SDK checks, not by this screenshot alone.
+Do not treat provisioning success as application readiness. Allow a new revision to become ready, then rerun the smoke check. Keep deployment records and rollback image references outside source control.
 
-![Live MCP server health JSON](images/04-azure-server-health.png)
+## 4. Verify ADO and OneNote in Copilot
 
-### VS Code Enterprise Registry Display
+For the optional Windows desktop workshop:
 
-After the user switched to GitHub Copilot provided by the same test enterprise, VS Code displayed both entries returned by the enterprise registry. This closes the earlier client-gallery visibility gap.
+```powershell
+$AdoOrganization = Read-Host 'Your Azure DevOps organization name'
+powershell.exe -NoProfile -STA -ExecutionPolicy RemoteSigned `
+  -File .\scripts\setup-onenote-demo.ps1 -AdoOrganization $AdoOrganization
+npm run demo:onenote
+.\scripts\demo.ps1
+```
 
-![VS Code displaying both enterprise MCP registry entries](images/05-vscode-enterprise-mcp-gallery.png)
+`demo:onenote` must report **6/6 live checks passed**. It discovers all four schemas, reads only the synthetic approved notebook/section/page, verifies the expected text marker, and rejects invalid notebook, page and schema inputs. It does not print notebook contents.
 
-This is evidence of registry retrieval and rendering only. The **MCP Setup Demo** entry shows a warning badge in this window, so installation/startup health must be checked separately with **MCP: List Servers > Show Output**. The deprecation banner at the top is a VS Code extension warning and is not evidence that the registry API failed.
+In the interactive CLI:
 
-## Issues Found and Resolved
+1. Review `/mcp` and complete ADO's provider sign-in. Copilot sign-in and ADO authorization are separate.
+2. Verify ADO exposes the three selected tools and OneNote exposes four read-only tools.
+3. Ask to list the approved OneNote notebooks and read the **MCP Workshop Demo** page.
+4. Make a small read-only ADO request against data you are authorized to use. Do not copy private work items into public verification output.
 
-1. The existing token-bearing raw catalog URL returned 404. Its source file was recovered using the authenticated GitHub browser and migrated into v0.1 response wrappers.
-2. Published Azure Verified Module types differed from older tool examples. Compilation caught the logging input and daily-quota type differences; the code uses the current module inputs.
-3. ACR Basic rejected the module's default network rule set. The code now explicitly selects `Allow` for public networking while retaining authenticated image access.
-4. The environment module defaulted to disabled public access. Live checks caught the resulting Azure 403; the public demo environment is now explicitly enabled in Bicep.
-5. The Windows npm PowerShell shim misparsed call-operator invocations. The original script selected `npm.cmd` on Windows. The current [simplified script](../scripts/deploy.ps1) uses ordinary `npm` commands without the call operator.
-6. Azure ingress normalized encoded slashes in server names. The registry now accepts encoded and decoded routes, with regression coverage.
-7. ARM success preceded completed revision routing. The initial post-rollout check reached the old route implementation; after verifying the ready revision, all live checks passed.
+Verify the workshop launcher selects exactly two enabled MCPs without a model call:
 
-## Boundaries
+```powershell
+$configuration = .\scripts\demo.ps1 mcp list --json | ConvertFrom-Json
+$configuration.mcpServers.PSObject.Properties |
+    Where-Object { $_.Value.enabled } | Select-Object Name
+```
 
-- No business data, secrets, or write-capable demo tools were added. The demo has no user authentication and is publicly callable.
-- The inherited third-party Playwright package was not installed, executed, upgraded, or independently reviewed. Its preserved metadata may be outdated; catalog ownership should review it separately.
-- VS Code gallery refresh was verified for a Copilot seat supplied by the test enterprise. Installation/trust and tool startup from that gallery entry were not verified by the gallery screenshot; SDK protocol behavior was verified independently. Registry-based enforcement is preview and has documented limitations.
-- Azure portal authentication is independent of CLI authentication. Azure evidence here consists of CLI-verified resources and integrated-browser screenshots of the live Azure endpoints, not a fabricated portal view.
-- No production OAuth, load test, penetration test, rate limiter, container OS vulnerability scan, private-network deployment, or automatic Azure CD identity was added.
-- Hosted GitHub Actions run 209944546 completed successfully at 2026-09-16T16:59:24Z. Installation, all tests, typechecking, and both Bicep compilation steps passed on Linux. The [workflow](../.github/workflows/validate.yml) has no Azure credentials and does not deploy.
-- The resource group remains deployed and can incur charges. Cleanup and production hardening are documented in the walkthrough but were not executed.
+Expected: `azure-devops` and `onenote-local`. The launcher temporarily disables other configured/default MCPs; it does not delete personal settings or provide an enterprise security boundary.
+
+In VS Code, use [.vscode/mcp.json](../.vscode/mcp.json), enter your own organization and approved notebook IDs, and repeat discovery plus an actual tool call. Use **MCP: List Servers > Show Output** to diagnose errors. Do not infer invocation success from a registry gallery listing.
+
+## 5. Verify Effective Client Policy
+
+GitHub [recommends managed MCP allowlists](https://docs.github.com/en/copilot/how-tos/administer-copilot/manage-mcp-usage/configure-enterprise-allowlist) for execution controls. Registry-based restriction is a separate preview feature. Follow the [current settings reference](https://docs.github.com/en/copilot/reference/enterprise-administrators/enterprise-managed-settings#allowedmcpservers), including supported clients, deployment sources and first-party exemptions.
+
+Administrator checklist:
+
+- Review the suggested `.local/managed-settings.json` generated by setup. It permits your ADO organization URL and one exact Node command/absolute entrypoint.
+- Merge only the intended keys into your enterprise's designated governance source, preserving existing plugins, marketplaces and other settings.
+- Use a supported client signed into an account receiving the intended enterprise Copilot seat.
+- Refresh/restart the client and inspect the effective policy, not just the committed source file.
+- **Positive test:** both approved servers connect and a read-only tool call succeeds.
+- **Negative test:** a harmless, unapproved test server is blocked in a normal client launch, **without** the workshop launcher's extra-server filters.
+- If an unapproved server still loads, stop the rollout and record the discrepancy. Do not claim enforcement because a two-entry registry or allowlist was saved.
+- Only migrate away from an existing **Registry only** restriction after the replacement controls have been validated for affected users.
+
+For multiple policy sources, allowlists intersect and explicit deny rules take precedence. User-chosen names are not strong identity checks; prefer exact URLs or commands. These controls do not replace backend authentication, per-user authorization or OS isolation.
+
+## 6. Check Before Sharing
+
+- Keep `.mcp.json`, `.local`, `.azure`, notebook IDs, tokens, private notes and raw client logs out of commits.
+- Use synthetic data for screenshots and live demos. Treat returned note content as untrusted data.
+- Review current `npm audit` output and container dependencies. A previous zero-advisory report is not a current security assessment; do not apply unreviewed forced dependency upgrades.
+- Record the timestamp, source commit, image digest, client versions, checks and limitations for your own rollout. Store account-specific records privately.
+- Preserve a known-good immutable image and a reviewed policy rollback before changing registry contents or restrictions.
+
+The existing [September JSON report](evidence/live-verification.json), [advisory snapshot](evidence/dependency-advisories.json), and [screenshots](images) are historical illustrations from a disposable test deployment. They may show old catalog entries, endpoints and client versions. They are not reusable settings, current approvals, or proof of the state of your environment.

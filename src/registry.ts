@@ -16,25 +16,33 @@ type CatalogEntry = {
   };
 };
 
-export function createRegistryServer(mcpServerUrl?: string) {
+export function loadRegistryCatalog(adoMcpUrl?: string): CatalogEntry[] {
   const catalog: CatalogEntry[] = JSON.parse(
     readFileSync(new URL('../registry/catalog.json', import.meta.url), 'utf8'),
   );
 
-  if (mcpServerUrl) {
-    const endpoint = new URL(mcpServerUrl);
-    const local = ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
-    if (endpoint.protocol !== 'https:' && !(local && endpoint.protocol === 'http:')) {
-      throw new Error('MCP_SERVER_URL must use HTTPS, except for local development.');
+  if (adoMcpUrl) {
+    const endpoint = new URL(adoMcpUrl);
+    if (endpoint.protocol !== 'https:') {
+      throw new Error('ADO_MCP_URL must use HTTPS.');
     }
     if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
-      throw new Error('MCP_SERVER_URL must not contain credentials, query parameters, or a fragment.');
+      throw new Error('ADO_MCP_URL must not contain credentials, query parameters, or a fragment.');
     }
-    const demo = catalog.find((entry) => entry.server.name === 'com.example/mcp-setup-demo');
-    if (!demo?.server.remotes?.[0]) throw new Error('Demo catalog entry is missing.');
-    demo.server.remotes[0].url = endpoint.href;
+    if (endpoint.hostname !== 'mcp.dev.azure.com' || endpoint.port
+      || !/^\/[a-z\d][a-z\d-]*$/iu.test(endpoint.pathname)) {
+      throw new Error('ADO_MCP_URL must identify an organization on the official Azure DevOps MCP endpoint.');
+    }
+    const ado = catalog.find((entry) => entry.server.name === 'io.github.melabadi/azure-devops');
+    if (!ado?.server.remotes?.[0]) throw new Error('Azure DevOps catalog entry is missing.');
+    ado.server.remotes[0].url = endpoint.href;
   }
 
+  return catalog;
+}
+
+export function createRegistryServer(adoMcpUrl?: string) {
+  const catalog = loadRegistryCatalog(adoMcpUrl);
   return createServer((request, response) => {
     response.setHeader('Access-Control-Allow-Origin', '*');
     response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');

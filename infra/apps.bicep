@@ -14,6 +14,11 @@ param registryName string
 @description('Immutable image reference including its sha256 digest.')
 param image string
 
+@description('Azure DevOps organization approved in the demo registry.')
+@minLength(1)
+@maxLength(50)
+param adoOrganization string
+
 resource environment 'Microsoft.App/managedEnvironments@2025-01-01' existing = {
   name: '${baseName}-env'
 }
@@ -94,7 +99,7 @@ module apps 'br/public:avm/res/app/container-app:0.23.0' = [for service in ['ser
           { name: 'PORT', value: '3000' }
           { name: 'HOST', value: '0.0.0.0' }
           { name: 'ALLOWED_HOSTS', value: serverHostname }
-          { name: 'MCP_SERVER_URL', value: 'https://${serverHostname}/mcp' }
+          { name: 'ADO_MCP_URL', value: 'https://mcp.dev.azure.com/${adoOrganization}' }
         ]
         resources: {
           cpu: json('0.25')
@@ -121,6 +126,7 @@ module apps 'br/public:avm/res/app/container-app:0.23.0' = [for service in ['ser
 type Endpoints = {
   registryUrl: string
   mcpServerUrl: string
+  adoMcpUrl: string
   serverName: string
   registryAppName: string
 }
@@ -128,6 +134,7 @@ type Endpoints = {
 output endpoints Endpoints = {
   registryUrl: 'https://${apps[1].outputs.fqdn}'
   mcpServerUrl: 'https://${apps[0].outputs.fqdn}/mcp'
+  adoMcpUrl: 'https://mcp.dev.azure.com/${adoOrganization}'
   serverName: serverName
   registryAppName: registryAppName
 }

@@ -16,7 +16,9 @@
     "start:stdio": "node src/stdio.ts",
     "start:notes": "node src/notes-stdio.ts",
     "start:onenote": "node src/onenote-stdio.ts",
-    "demo:notes": "node scripts/notes-demo.ts"
+    "demo:notes": "node scripts/notes-demo.ts",
+    "demo:onenote": "node scripts/onenote-demo.ts",
+    "demo:hello": "node examples/hello/client.ts"
   },
   "dependencies": {
     "@azure/msal-node": "^7.1.2",

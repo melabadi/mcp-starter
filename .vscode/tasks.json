@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "MCP Workshop: Copilot CLI",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-File",
+				"${workspaceFolder}\\scripts\\demo.ps1",
+				"-i",
+				"/mcp"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}
