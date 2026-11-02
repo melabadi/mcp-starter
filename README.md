@@ -4,6 +4,10 @@ Learn to use, build, publish, and govern MCP servers. Start with a credential-fr
 
 The optional two-server workshop connects Microsoft's remote Azure DevOps MCP and a local, read-only Windows OneNote COM MCP. You supply your own organization and approved notebook configuration; this checkout does not require the author's accounts or deployed resources.
 
+**Workshop slides:** [MCP: from protocol to production (PDF, 33 slides)](docs/MCP-Technical-Workshop.pdf).
+
+The slides use a Graph-based OneNote example and an earlier catalog identity. Follow this README for the current runnable commands and catalog names; the default OneNote adapter now uses desktop COM, with Graph available as an optional backend.
+
 1. [Quick start: no cloud account required](#quick-start)
 2. [Run and query an MCP registry](#how-to-host-a-registry)
 3. [Deploy your registry to Azure](#deploy-this-registry-to-azure)
