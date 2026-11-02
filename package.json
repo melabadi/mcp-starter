@@ -15,12 +15,15 @@
     "start:registry": "node src/main.ts registry",
     "start:stdio": "node src/stdio.ts",
     "start:notes": "node src/notes-stdio.ts",
+    "start:onenote": "node src/onenote-stdio.ts",
     "demo:notes": "node scripts/notes-demo.ts"
   },
   "dependencies": {
+    "@azure/msal-node": "^7.1.2",
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
+    "parse5": "^8.0.1",
     "zod": "4.5.4"
   },
   "devDependencies": {

@@ -27,6 +27,7 @@ The repository contains working TypeScript services, Bicep infrastructure, Power
 | Run the server over stdio | [src/stdio.ts](src/stdio.ts) |
 | Read local `.txt` notes through MCP | [src/notes-server.ts](src/notes-server.ts) and [src/notes.ts](src/notes.ts) |
 | Launch the local notes server | [src/notes-stdio.ts](src/notes-stdio.ts) |
+| Read approved OneNote notebooks through MCP | [src/onenote-server.ts](src/onenote-server.ts), [src/onenote.ts](src/onenote.ts), and [src/onenote-auth.ts](src/onenote-auth.ts) |
 | See real notes discovery and tool calls | [scripts/notes-demo.ts](scripts/notes-demo.ts) |
 | Browse public example notes | [examples/notes](examples/notes) |
 | Connect VS Code | [.vscode/mcp.json](.vscode/mcp.json) |
@@ -137,6 +138,65 @@ The entrypoint path above is a placeholder, not a required location. Other MCP h
 - Filenames, matching passages, and requested lines are sent to the connected AI host and may be sent to its model provider. Local execution is **not** a promise that returned data stays on your device. Treat note contents as untrusted data, never as instructions to run commands or disclose more files.
 - The server does not persist results or log note contents, and its own error messages omit absolute filesystem paths. The demo script intentionally prints only the public samples. Your host may retain tool results in chat history. Keep personal notes outside this repository and use synthetic notes for demos and screenshots.
 - Use a trusted, dedicated folder and normal user permissions. Path checks are not an OS sandbox against another local process maliciously replacing directories while calls run. No private data integration is added to the Azure HTTP service, Docker deployment, or public registry catalog.
+
+## Read OneNote Through MCP
+
+The separate OneNote server uses delegated Microsoft Graph access and is **read-only**. It is not part of the anonymous Azure service or registry. It uses the official MCP TypeScript SDK v2 over stdio, MSAL Node device-code sign-in, and Graph's delegated `Notes.Read` permission. Access tokens stay in process memory; sign-in may be needed again after restarting the server.
+
+### Register and Configure the App
+
+1. In Microsoft Entra, register an app for the account type you use. Enable **Allow public client flows**; do not create a client secret.
+2. Add the Microsoft Graph **delegated** `Notes.Read` permission and complete any required user or administrator consent.
+3. Use Microsoft Graph Explorer, signed in to the intended account with `Notes.Read`, to list notebook IDs using `GET https://graph.microsoft.com/v1.0/me/onenote/notebooks?$select=id,displayName`. Choose only the notebooks this MCP server should expose.
+4. Configure the environment variables in a private, user-level MCP configuration. Do not commit notebook IDs or a machine-specific client ID to this repository:
+
+```powershell
+$env:ONENOTE_CLIENT_ID = '00000000-0000-0000-0000-000000000000'
+$env:ONENOTE_TENANT_ID = 'organizations'
+$env:ONENOTE_ALLOWED_NOTEBOOK_IDS = '["NOTEBOOK-ID-FROM-GRAPH"]'
+npm run start:onenote
+```
+
+`ONENOTE_TENANT_ID` can be a tenant GUID/domain, `organizations`, or `consumers`. `ONENOTE_ALLOWED_NOTEBOOK_IDS` must be a JSON array containing 1–25 unique IDs. The server lists and reads only those notebooks; a page's notebook membership is checked before its content is requested. Sign-in instructions and device codes are written to stderr, not MCP stdout.
+
+For a VS Code user-level MCP configuration, use this pattern and replace the entrypoint path with the path to your checkout. The prompts keep account-specific settings out of the shared repository configuration:
+
+```json
+{
+  "servers": {
+    "my-onenote": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["C:\\path\\to\\mcp-starter\\src\\onenote-stdio.ts"],
+      "env": {
+        "ONENOTE_CLIENT_ID": "${input:oneNoteClientId}",
+        "ONENOTE_TENANT_ID": "${input:oneNoteTenantId}",
+        "ONENOTE_ALLOWED_NOTEBOOK_IDS": "${input:oneNoteNotebookIds}"
+      }
+    }
+  },
+  "inputs": [
+    { "id": "oneNoteClientId", "type": "promptString", "description": "Entra public client ID" },
+    { "id": "oneNoteTenantId", "type": "promptString", "description": "Tenant ID/domain, organizations, or consumers" },
+    { "id": "oneNoteNotebookIds", "type": "promptString", "description": "JSON array of approved notebook IDs" }
+  ]
+}
+```
+
+For other MCP hosts, launch the same entrypoint with the same environment variables. Keep the environment values in user settings rather than the shared workspace configuration.
+
+### Available Tools and Limits
+
+| Tool | Purpose |
+| --- | --- |
+| `list_notebooks` | List only the configured allowlisted notebooks. |
+| `list_sections` | List sections from one approved notebook, with bounded pagination. |
+| `list_pages` | List pages after confirming the section belongs to the approved notebook. |
+| `read_page` | Extract bounded plain text from a page after confirming its notebook membership. |
+
+Page HTML is parsed locally; scripts, styles, and external images/links are not executed or fetched. Graph responses are size-limited, pagination URLs are restricted to the expected Graph OneNote route, and throttling/authentication errors are surfaced. Notebook/page text is sent to the connected AI host and may be sent to its model provider; treat it as untrusted data and do not use private notebooks in public demos.
+
+The tests exercise the real MCP client/server stdio exchange and mocked Graph responses, including allowlist checks and HTML extraction. They do not perform a live Microsoft sign-in or Graph request; that requires an app registration, consent, and an account configured on the user's machine.
 
 ## How to Host a Registry
 
