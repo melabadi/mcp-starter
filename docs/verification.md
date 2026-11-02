@@ -24,6 +24,8 @@ Expected outcomes:
 
 The test suite includes registry routing, metadata, pagination, CORS/write rejection, real SDK stdio and HTTP exchanges, invalid inputs, OneNote access boundaries, HTML extraction limits, and PowerShell deployment failure paths. Mocked Graph/COM tests are not evidence of live Microsoft sign-in or desktop access.
 
+Bridge regressions run under both Windows PowerShell 5.1 and PowerShell 7 on Windows. Linux checks the same XML/JSON and access-boundary behavior with a fake COM object; OneNote desktop COM itself still requires Windows.
+
 GitHub Actions runs tests and typecheck on Windows and Linux and compiles Bicep on Linux. Check the run for your commit rather than relying on an old successful run.
 
 ## 2. Verify Catalog Discovery

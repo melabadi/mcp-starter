@@ -56,7 +56,12 @@ function Get-Metadata([Xml.XmlElement]$Element, [string]$NameKey) {
 }
 
 try {
-    $allowed = $env:ONENOTE_ALLOWED_NOTEBOOK_IDS | ConvertFrom-Json
+    $jsonParameters = @{ InputObject = $env:ONENOTE_ALLOWED_NOTEBOOK_IDS }
+    # PowerShell 7 unwraps singleton arrays; Windows PowerShell 5.1 has no NoEnumerate switch.
+    if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('NoEnumerate')) {
+        $jsonParameters.NoEnumerate = $true
+    }
+    $allowed = ConvertFrom-Json @jsonParameters
     if ($allowed -isnot [array] -or $allowed.Count -lt 1 -or $allowed.Count -gt 25 -or
         @($allowed | Select-Object -Unique).Count -ne $allowed.Count) {
         throw 'OneNote COM: Configure 1-25 unique approved notebook IDs.'

@@ -130,40 +130,46 @@ if ($env:COM_TEST_CASE -eq 'outside-section') { $parameters.SectionId='outside' 
 `;
 
 test('native PowerShell bridge handles one-item JSON arrays and verifies membership before reading', async (context) => {
-  for (const [scenario, action] of [
-    ['notebooks', 'notebooks'], ['sections', 'sections'], ['pages', 'pages'], ['page', 'page'],
-    ['outside-page', 'page'], ['outside-section', 'pages'], ['mismatch', 'page'], ['oversized', 'notebooks'],
-  ]) {
-    await context.test(scenario!, () => {
-      const command = process.platform === 'win32'
-        ? join(process.env.SystemRoot!, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-        : 'pwsh';
-      const result = spawnSync(command, [
-        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'RemoteSigned',
-        '-EncodedCommand', Buffer.from(bridgeHarness, 'utf16le').toString('base64'),
-      ], {
-        env: {
-          ...process.env,
-          COM_TEST_BRIDGE: fileURLToPath(new URL('../scripts/onenote-com.ps1', import.meta.url)),
-          COM_TEST_CASE: scenario, COM_TEST_ACTION: action,
-          ONENOTE_ALLOWED_NOTEBOOK_IDS: '["approved"]',
-        },
-        encoding: 'utf8', timeout: 15_000,
+  const commands = process.platform === 'win32'
+    ? [join(process.env.SystemRoot!, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), 'pwsh']
+    : ['pwsh'];
+  const invalidConfigurations: Record<string, string> = {
+    scalar: '"approved"', empty: '[]', duplicates: '["approved","approved"]',
+  };
+  for (const command of commands) {
+    for (const [scenario, action] of [
+      ['notebooks', 'notebooks'], ['sections', 'sections'], ['pages', 'pages'], ['page', 'page'],
+      ['outside-page', 'page'], ['outside-section', 'pages'], ['mismatch', 'page'], ['oversized', 'notebooks'],
+      ['scalar', 'notebooks'], ['empty', 'notebooks'], ['duplicates', 'notebooks'],
+    ] as const) {
+      await context.test(`${command === 'pwsh' ? 'PowerShell 7' : 'Windows PowerShell 5.1'}: ${scenario}`, () => {
+        const result = spawnSync(command, [
+          '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'RemoteSigned',
+          '-EncodedCommand', Buffer.from(bridgeHarness, 'utf16le').toString('base64'),
+        ], {
+          env: {
+            ...process.env,
+            COM_TEST_BRIDGE: fileURLToPath(new URL('../scripts/onenote-com.ps1', import.meta.url)),
+            COM_TEST_CASE: scenario, COM_TEST_ACTION: action,
+            ONENOTE_ALLOWED_NOTEBOOK_IDS: invalidConfigurations[scenario] ?? '["approved"]',
+          },
+          encoding: 'utf8', timeout: 15_000,
+        });
+        assert.ifError(result.error);
+        if (['notebooks', 'sections', 'pages', 'page'].includes(scenario)) {
+          assert.equal(result.status, 0, result.stderr);
+          const response = JSON.parse(result.stdout.replace(/^\uFEFF/u, ''));
+          if (scenario === 'notebooks') assert.deepEqual(response, { notebooks: [{ id: 'approved', displayName: 'Demo' }] });
+          if (scenario === 'sections') assert.deepEqual(response.sections.map((section: { id: string }) => section.id), ['section', 'nested']);
+          if (scenario === 'pages') assert.deepEqual(response, { pages: [{ id: 'page', title: 'Welcome' }] });
+          if (scenario === 'page') assert.equal(response.html, '<div>Hello COM.</div>');
+        } else {
+          assert.notEqual(result.status, 0);
+          assert.equal(result.stdout, '');
+          assert.match(result.stderr, /OneNote COM:/u);
+          if (scenario.startsWith('outside-')) assert.doesNotMatch(result.stderr, /content-requested/u);
+        }
       });
-      assert.ifError(result.error);
-      if (['notebooks', 'sections', 'pages', 'page'].includes(scenario!)) {
-        assert.equal(result.status, 0, result.stderr);
-        const response = JSON.parse(result.stdout.replace(/^\uFEFF/u, ''));
-        if (scenario === 'notebooks') assert.deepEqual(response, { notebooks: [{ id: 'approved', displayName: 'Demo' }] });
-        if (scenario === 'sections') assert.deepEqual(response.sections.map((section: { id: string }) => section.id), ['section', 'nested']);
-        if (scenario === 'pages') assert.deepEqual(response, { pages: [{ id: 'page', title: 'Welcome' }] });
-        if (scenario === 'page') assert.equal(response.html, '<div>Hello COM.</div>');
-      } else {
-        assert.notEqual(result.status, 0);
-        assert.equal(result.stdout, '');
-        assert.match(result.stderr, /OneNote COM:/u);
-        if (scenario!.startsWith('outside-')) assert.doesNotMatch(result.stderr, /content-requested/u);
-      }
-    });
+    }
   }
 });
