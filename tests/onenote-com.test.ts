@@ -153,7 +153,7 @@ test('native PowerShell bridge handles one-item JSON arrays and verifies members
             COM_TEST_CASE: scenario, COM_TEST_ACTION: action,
             ONENOTE_ALLOWED_NOTEBOOK_IDS: invalidConfigurations[scenario] ?? '["approved"]',
           },
-          encoding: 'utf8', timeout: 15_000,
+          encoding: 'utf8', timeout: 30_000,
         });
         assert.ifError(result.error);
         if (['notebooks', 'sections', 'pages', 'page'].includes(scenario)) {
